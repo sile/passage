@@ -1,35 +1,24 @@
-%%%-------------------------------------------------------------------
-%% @doc trace top level supervisor.
-%% @end
-%%%-------------------------------------------------------------------
-
 -module(passage_sup).
 
 -behaviour(supervisor).
 
-%% API
 -export([start_link/0]).
 
-%% Supervisor callbacks
 -export([init/1]).
 
--define(SERVER, ?MODULE).
-
-%%====================================================================
-%% API functions
-%%====================================================================
-
 start_link() ->
-    supervisor:start_link({local, ?SERVER}, ?MODULE, []).
+    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
-%%====================================================================
-%% Supervisor callbacks
-%%====================================================================
-
-%% Child :: {Id,StartFunc,Restart,Shutdown,Type,Modules}
 init([]) ->
-    {ok, { {one_for_all, 0, 1}, []} }.
-
-%%====================================================================
-%% Internal functions
-%%====================================================================
+    Registry = #{
+      id      => passage_registry,
+      start   => {passage_registry, start_link, []},
+      restart => permanent
+     },
+    NameServer = passage_local_ns:child_spec(),
+    MailboxSup = #{
+      id    => passage_mailbox_sup,
+      start => {passage_mailbox_sup, start_link, []},
+      type  => supervisor
+     },
+    {ok, {#{stragety => rest_for_one}, [Registry, NameServer, MailboxSup]} }.
