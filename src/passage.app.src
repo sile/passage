@@ -5,13 +5,12 @@
   {mod, { passage_app, []}},
   {applications,
    [kernel,
-    stdlib,
-    local
+    stdlib
    ]},
   {env,[]},
   {modules, []},
 
   {maintainers, []},
-  {licenses, ["Apache 2.0"]},
+  {licenses, ["MIT"]},
   {links, []}
  ]}.

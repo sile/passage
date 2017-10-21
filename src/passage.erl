@@ -27,7 +27,7 @@
 
 -type tracer_id() :: atom().
 
--type start_span_option() :: {tracer, tracer_id()}
+-type start_span_option() :: {tracer, tracer_id()} % optional
                            | {time, erlang:timestamp()}
                            | {refs, refs()}
                            | {tags, tags()}.

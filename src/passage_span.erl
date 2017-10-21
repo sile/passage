@@ -43,7 +43,7 @@ start(OperationName, Options) ->
             undefined -> os:timestamp();
             Time      -> Time
         end,
-    Tracer = proplists:get_value(tracer, Options, passage_tracer:default_tracer()),
+    Tracer = proplists:get_value(tracer, Options), % TODO: handle undefined
     Refs = proplists:get_value(refs, Options, []),
     Tags = proplists:get_value(tags, Options, []),
     Span =
@@ -74,7 +74,8 @@ finish(Span0, Options) ->
             Time      -> Time
         end,
     Span1 = Span0#?SPAN{finish_time = FinishTime},
-    passage_mailbox:post(Span1).
+    Reporter = passage_registry:get_reporter(Span1#?SPAN.tracer),
+    passage_reporter:report(Reporter, Span1).
 
 -spec set_tags(maybe_span(), passage:tags()) -> maybe_span().
 set_tags(undefined, _Tags) -> undefined;
