@@ -9,17 +9,15 @@
 %%------------------------------------------------------------------------------
 %% Exported API
 %%------------------------------------------------------------------------------
+-export([get_operation_name/1]).
+-export([get_tags/1]).
+-export([get_refs/1]).
+-export([get_logs/1]).
+-export([get_baggage_items/1]).
+
 -export_type([span/0]).
 -export_type([normalized_refs/0, normalized_ref/0]).
-
-%%
--export([set_operation_name/2]).
--export([set_tags/2]).
--export([log/3]).
--export([set_baggage_items/2]).
--export([get_baggage_items/1]).
--export([get_context/1]).
--export([get_tracer/1]).
+-export_type([log/0]).
 
 %%------------------------------------------------------------------------------
 %% Application Internal API
@@ -27,17 +25,17 @@
 -export([make_extracted_span/2]).
 -export([start/2, start_root/3]).
 -export([finish/2]).
+-export([set_operation_name/2]).
+-export([set_tags/2]).
+-export([log/3]).
+-export([set_baggage_items/2]).
+-export([get_tracer/1]).
+-export([get_context/1]).
 
 %%------------------------------------------------------------------------------
 %% Macros & Records
 %%------------------------------------------------------------------------------
 -define(SPAN, ?MODULE).
-
--record(log,
-        {
-          fields :: passage:log_fields(),
-          time   :: erlang:timestamp()
-        }).
 
 -record(?SPAN,
         {
@@ -47,7 +45,7 @@
           finish_time = undefined :: erlang:timestamp() | undefined,
           refs = [] :: normalized_refs(),
           tags = #{} :: passage:tags(),
-          logs = [] :: [#log{}],
+          logs = [] :: [log()],
           context :: passage_span_context:maybe_context()
         }).
 
@@ -60,9 +58,30 @@
 
 -type normalized_ref() :: {passage:ref_type(), span()}.
 
+-type log() :: {passage:log_fields(), erlang:timestamp()}.
+
 %%------------------------------------------------------------------------------
 %% Exported Functions
 %%------------------------------------------------------------------------------
+-spec get_operation_name(span()) -> passage:operation_name().
+get_operation_name(Span) ->
+    Span#?SPAN.operation_name.
+
+-spec get_tags(span()) -> passage:tags().
+get_tags(Span) ->
+    Span#?SPAN.tags.
+
+-spec get_refs(span()) -> normalized_refs().
+get_refs(Span) ->
+    Span#?SPAN.refs.
+
+-spec get_logs(span()) -> [log()].
+get_logs(Span) ->
+    Span#?SPAN.logs.
+
+-spec get_baggage_items(span()) -> passage:baggage_items().
+get_baggage_items(Span) ->
+    passage_span_context:get_baggage_items(Span#?SPAN.context).
 
 %%------------------------------------------------------------------------------
 %% Application Internal Functions
@@ -87,11 +106,7 @@ start_root(Tracer, OperationName, Options) ->
         false -> undefined;
         true  ->
             Context = passage_span_context:make(Tracer, []),
-            StartTime =
-                case lists:keyfind(time, 1, Options) of
-                    false     -> os:timestamp();
-                    {_, Time} -> Time
-                end,
+            StartTime = get_time(Options),
             #?SPAN{
                 tracer         = Tracer,
                 operation_name = OperationName,
@@ -111,11 +126,7 @@ start(OperationName, Options) ->
             Tracer = get_tracer(Primary),
             Context = passage_span_context:make(Tracer, Refs),
             Tags = proplists:get_value(tags, Options, #{}),
-            StartTime =
-                case lists:keyfind(time, 1, Options) of
-                    false     -> os:timestamp();
-                    {_, Time} -> Time
-                end,
+            StartTime = get_time(Options),
             #?SPAN{
                 tracer         = Tracer,
                 operation_name = OperationName,
@@ -126,10 +137,52 @@ start(OperationName, Options) ->
                }
     end.
 
+%% @private
+-spec finish(span(), passage:finish_span_options()) -> ok.
+finish(#?SPAN{operation_name = undefined, start_time = {0, 0, 0}}, _) ->
+    %% This is an extracted span (ignored).
+    ok;
+finish(Span0, Options) ->
+    FinishTime = get_time(Options),
+    Span1 = Span0#?SPAN{finish_time = FinishTime},
+    Reporter = passage_registry:get_reporter(Span1#?SPAN.tracer),
+    passage_reporter:report(Reporter, Span1).
+
+%% @private
+-spec set_operation_name(span(), passage:operation_name()) -> span().
+set_operation_name(Span, OperationName) ->
+    Span#?SPAN{operation_name = OperationName}.
+
+%% @private
+-spec set_tags(span(), passage:tags()) -> span().
+set_tags(Span, Tags) ->
+    Span#?SPAN{tags = maps:merge(Span#?SPAN.tags, Tags)}.
+
+%% @private
+-spec log(span(), passage:log_fields(), passage:log_options()) -> span().
+log(Span, Fields, Options) ->
+    Time = get_time(Options),
+    Span#?SPAN{logs = [{Fields, Time} | Span#?SPAN.logs]}.
+
+%% @private
+-spec set_baggage_items(span(), passage:baggage_items()) -> span().
+set_baggage_items(Span, Items) ->
+    Context = Span#?SPAN.context,
+    Span#?SPAN{context = passage_span_context:set_baggage_items(Context, Items)}.
+
+%% @private
+-spec get_context(span()) -> passage_span_context:context().
+get_context(Span) ->
+    Span#?SPAN.context.
+
+%% @private
+-spec get_tracer(span()) -> passage:tracer_id().
+get_tracer(Span) ->
+    Span#?SPAN.tracer.
+
 %%------------------------------------------------------------------------------
 %% Internal Functions
 %%------------------------------------------------------------------------------
-
 -spec is_sampled(passage:tracer_id(), passage:operation_name(), passage:tags()) -> boolean().
 is_sampled(Tracer, OperationName, Tags) ->
     case maps:find(?TAG_SAMPLING_PRIORITY, Tags) of
@@ -139,55 +192,9 @@ is_sampled(Tracer, OperationName, Tags) ->
             passage_sampler:is_sampled(Sampler, OperationName, Tags)
     end.
 
--type maybe_span() :: term().
-
-%% @private
--spec finish(span(), passage:finish_span_options()) -> ok.
-finish(#?SPAN{operation_name = undefined, start_time = {0, 0, 0}}, _) ->
-    %% This is an extracted span (ignored).
-    ok;
-finish(Span0, Options) ->
-    FinishTime =
-        case proplists:get_value(time, Options) of
-            undefined -> os:timestamp();
-            Time      -> Time
-        end,
-    Span1 = Span0#?SPAN{finish_time = FinishTime},
-    Reporter = passage_registry:get_reporter(Span1#?SPAN.tracer),
-    passage_reporter:report(Reporter, Span1).
-
--spec set_operation_name(span(), passage:operation_name()) -> span().
-set_operation_name(Span, OperationName) ->
-    Span#?SPAN{operation_name = OperationName}.
-
--spec set_tags(maybe_span(), passage:tags()) -> maybe_span().
-set_tags(undefined, _Tags) -> undefined;
-set_tags(Span,       Tags) -> Span#?SPAN{tags = maps:merge(Span#?SPAN.tags, Tags)}.
-
--spec log(maybe_span(), passage:log_fields(), [passage:log_option()]) -> maybe_span().
-log(undefined, _Fields, _Options) -> undefined;
-log(Span, Fields, Options) ->
-    Time =
-        case proplists:get_value(time, Options) of
-            undefined -> os:timestamp();
-            Timestamp -> Timestamp
-        end,
-    Log = #log{fields = Fields, time = Time},
-    Span#?SPAN{logs = [Log | Span#?SPAN.logs]}.
-
--spec set_baggage_items(maybe_span(), passage:baggage_items()) -> maybe_span().
-set_baggage_items(Span, Items) ->
-    Span#?SPAN{context = passage_span_context:set_baggage_items(get_context(Span), Items)}.
-
--spec get_baggage_items(maybe_span()) -> passage:baggage_items().
-get_baggage_items(Span) ->
-    passage_span_context:get_baggage_items(get_context(Span)).
-
--spec get_context(maybe_span()) -> passage_span_context:maybe_context().
-get_context(undefined) -> undefined;
-get_context(Span)      -> Span#?SPAN.context.
-
-%% TODO: `span()` or `maybe_span()`
--spec get_tracer(span()) -> passage:tracer_id().
-get_tracer(Span) ->
-    Span#?SPAN.tracer.
+-spec get_time([{time, erlang:timestamp()}]) -> erlang:timestamp().
+get_time(Options) ->
+    case lists:keyfind(time, 1, Options) of
+        false     -> os:timestamp();
+        {_, Time} -> Time
+    end.
