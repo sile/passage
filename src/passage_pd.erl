@@ -7,6 +7,7 @@
 %%------------------------------------------------------------------------------
 %% Exported API
 %%------------------------------------------------------------------------------
+-export([start_root_span/2, start_root_span/3]).
 -export([start_span/1, start_span/2]).
 -export([finish_span/0, finish_span/1]).
 -export([with_span/2, with_span/3]).
@@ -26,6 +27,16 @@
 %%------------------------------------------------------------------------------
 %% Exported Functions
 %%------------------------------------------------------------------------------
+-spec start_root_span(passage:tracer_id(), passage:operation_name()) -> ok.
+start_root_span(Tracer, OperationName) ->
+    start_root_span(Tracer, OperationName, []).
+
+-spec start_root_span(passage:tracer_id(), passage:operation_name(), passge:start_root_span_options()) -> ok.
+start_root_span(Tracer, OperationName, Options) ->
+    case passage:start_root_span(Tracer, OperationName, Options) of
+        undefined -> ok;
+        Span      -> put_ancestors([Span | get_ancestors()])
+    end.
 
 -spec start_span(passage:operation_name()) -> ok.
 start_span(OperationName) ->

@@ -4,11 +4,11 @@
 
 -export([new/0]).
 
--export([is_sampled/4]).
+-export([is_sampled/3]).
 
 -spec new() -> passage_sampler:sampler().
 new() ->
     passage_sampler:new(?MODULE, undefined).
 
-is_sampled(_State, _Tracer, _OperationName, _Tags) ->
+is_sampled(_State, _OperationName, _Tags) ->
     false.

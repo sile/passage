@@ -36,9 +36,10 @@
 -callback extract_span_context(format(), carrier(), extract_fun()) ->
     {ok, passage_span_context:context()} | error.
 
--spec make(passage_span:span(), passage:baggage_items()) -> context().
-make(Span, BaggageItems) ->
-    State = passage_tracer:make_span_context_state(Span, BaggageItems),
+-spec make(passage:tracer_id(), passage_span:normalized_refs()) -> context().
+make(Tracer, Refs) ->
+    State = passage_tracer:make_span_context_state(Tracer, Refs),
+    BaggageItems = lists:foldr(fun maps:merge/2, #{}, Refs),
     #?CONTEXT{ state = State, baggage_items = BaggageItems }.
 
 -spec get_baggage_items(maybe_context()) -> passage:baggage_items().

@@ -1,10 +1,18 @@
+%% @copyright 2017 Takeru Ohta <phjgt308@gmail.com>
+%%
+%% @doc TODO
+%%
 -module(passage_span).
 
 -include("opentracing.hrl").
 
--export([make/2]). % TODO
--export([start/2]).
--export([finish/2]).
+%%------------------------------------------------------------------------------
+%% Exported API
+%%------------------------------------------------------------------------------
+-export_type([span/0]).
+-export_type([normalized_refs/0, normalized_ref/0]).
+
+%%
 -export([set_operation_name/2]).
 -export([set_tags/2]).
 -export([log/3]).
@@ -13,8 +21,16 @@
 -export([get_context/1]).
 -export([get_tracer/1]).
 
--export_type([span/0, maybe_span/0]).
+%%------------------------------------------------------------------------------
+%% Application Internal API
+%%------------------------------------------------------------------------------
+-export([make_extracted_span/2]).
+-export([start/2, start_root/3]).
+-export([finish/2]).
 
+%%------------------------------------------------------------------------------
+%% Macros & Records
+%%------------------------------------------------------------------------------
 -define(SPAN, ?MODULE).
 
 -record(log,
@@ -28,58 +44,108 @@
           tracer :: passage:tracer_id(),
           operation_name :: passage:operation_name(),
           start_time :: erlang:timestamp(),
-          finish_time :: erlang:timestamp(),
-          refs = [] :: passage:refs(), % TODO: normalize
+          finish_time = undefined :: erlang:timestamp() | undefined,
+          refs = [] :: normalized_refs(),
           tags = #{} :: passage:tags(),
           logs = [] :: [#log{}],
           context :: passage_span_context:maybe_context()
         }).
 
+%%------------------------------------------------------------------------------
+%% Exported Types
+%%------------------------------------------------------------------------------
 -opaque span() :: #?SPAN{}.
--type maybe_span() :: span() | undefined.
 
--spec make(passage:tracer_id(), passage_span_context:context()) -> span().
-make(TracerId, Context) ->
+-type normalized_refs() :: [normalized_ref()].
+
+-type normalized_ref() :: {passage:ref_type(), span()}.
+
+%%------------------------------------------------------------------------------
+%% Exported Functions
+%%------------------------------------------------------------------------------
+
+%%------------------------------------------------------------------------------
+%% Application Internal Functions
+%%------------------------------------------------------------------------------
+%% @private
+-spec make_extracted_span(passage:tracer_id(), passage_span_context:context()) -> span().
+make_extracted_span(Tracer, Context) ->
     #?SPAN{
-        tracer = TracerId,
+        tracer         = Tracer,
         operation_name = undefined,
-        start_time = {0,0,0},
-        finish_time = {0,0,0},
-        context = Context
+        start_time     = {0, 0, 0},
+        context        = Context
        }.
 
-%% TODO: move
--spec start(passage:operation_name(), [passage:start_span_option()]) -> maybe_span().
-start(OperationName, Options) ->
-    StartTime =
-        case proplists:get_value(time, Options) of
-            undefined -> os:timestamp();
-            Time      -> Time
-        end,
-    Tracer = proplists:get_value(tracer, Options), % TODO: handle undefined
-    Refs = proplists:get_value(refs, Options, []),
-    Tags = proplists:get_value(tags, Options, []),
-    Span =
-        #?SPAN{
-            tracer = Tracer,
-            operation_name = OperationName,
-            start_time = StartTime,
-            finish_time = StartTime,
-            refs = lists:filter(fun ({_, S}) -> S =/= undefined end, Refs),
-            tags = Tags,
-            logs = [],
-            context = undefined
-           },
-    case is_sampled(Span) of
+%% @private
+-spec start_root(passage:tracer_id(), passage:operation_name(), Options) ->
+                        passage:maybe_span() when
+      Options :: passage:start_root_span_options().
+start_root(Tracer, OperationName, Options) ->
+    Tags = proplists:get_value(tags, Options, #{}),
+    case is_sampled(Tracer, OperationName, Tags) of
         false -> undefined;
         true  ->
-            BaggageItems = lists:foldr(fun maps:merge/2, #{}, Refs),
-            Context = passage_span_context:make(Span, BaggageItems),
-            Span#?SPAN{context = Context}
+            Context = passage_span_context:make(Tracer, []),
+            StartTime =
+                case lists:keyfind(time, 1, Options) of
+                    false     -> os:timestamp();
+                    {_, Time} -> Time
+                end,
+            #?SPAN{
+                tracer         = Tracer,
+                operation_name = OperationName,
+                start_time     = StartTime,
+                tags           = Tags,
+                context        = Context
+               }
     end.
 
--spec finish(maybe_span(), [passage:finish_span_option()]) -> ok.
-finish(undefined, _Options) -> ok;
+%% @private
+-spec start(passage:operation_name(), passage:start_span_options()) -> passage:maybe_span().
+start(OperationName, Options) ->
+    Refs = lists:keydelete(undefined, 2, proplists:get_value(refs, Options, [])),
+    case Refs of
+        []                 -> undefined;
+        [{_, Primary} | _] ->
+            Tracer = get_tracer(Primary),
+            Context = passage_span_context:make(Tracer, Refs),
+            Tags = proplists:get_value(tags, Options, #{}),
+            StartTime =
+                case lists:keyfind(time, 1, Options) of
+                    false     -> os:timestamp();
+                    {_, Time} -> Time
+                end,
+            #?SPAN{
+                tracer         = Tracer,
+                operation_name = OperationName,
+                start_time     = StartTime,
+                refs           = Refs,
+                tags           = Tags,
+                context        = Context
+               }
+    end.
+
+%%------------------------------------------------------------------------------
+%% Internal Functions
+%%------------------------------------------------------------------------------
+
+-spec is_sampled(passage:tracer_id(), passage:operation_name(), passage:tags()) -> boolean().
+is_sampled(Tracer, OperationName, Tags) ->
+    case maps:find(?TAG_SAMPLING_PRIORITY, Tags) of
+        {ok, V} -> 0 < V;
+        _       ->
+            Sampler = passage_tracer:get_sampler(Tracer),
+            passage_sampler:is_sampled(Sampler, OperationName, Tags)
+    end.
+
+-type maybe_span() :: term().
+
+%% @private
+-spec finish(span(), passage:finish_span_options()) -> ok.
+finish(#?SPAN{operation_name = undefined, start_time = {0, 0, 0}}, _) ->
+    %% This is an extracted span (ignored).
+    ok;
 finish(Span0, Options) ->
     FinishTime =
         case proplists:get_value(time, Options) of
@@ -125,17 +191,3 @@ get_context(Span)      -> Span#?SPAN.context.
 -spec get_tracer(span()) -> passage:tracer_id().
 get_tracer(Span) ->
     Span#?SPAN.tracer.
-
--spec is_sampled(span()) -> boolean().
-is_sampled(Span = #?SPAN{tags = Tags, refs = Refs, tracer = Tracer}) ->
-    case maps:find(?TAG_SAMPLING_PRIORITY, Tags) of
-        {ok, V} -> 0 < V;
-        _       ->
-            case Refs =/= [] of
-                true  -> true;
-                false ->
-                    Sampler = passage_tracer:get_sampler(Tracer),
-                    Name = Span#?SPAN.operation_name,
-                    passage_sampler:is_sampled(Sampler, Tracer, Name, Tags)
-            end
-    end.

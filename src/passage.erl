@@ -7,7 +7,8 @@
 %%------------------------------------------------------------------------------
 %% Exported API
 %%------------------------------------------------------------------------------
--export([start_span/1, start_span/2]).
+-export([start_root_span/2, start_root_span/3]).
+-export([start_span/2, start_span/3]).
 -export([finish_span/1, finish_span/2]).
 -export([set_operation_name/2]).
 -export([set_tags/2]).
@@ -20,6 +21,7 @@
 -export_type([tracer_id/0]).
 -export_type([maybe_span/0]).
 -export_type([operation_name/0]).
+-export_type([start_root_span_option/0, start_root_span_options/0]).
 -export_type([start_span_option/0, start_span_options/0]).
 -export_type([finish_span_option/0, finish_span_options/0]).
 -export_type([tags/0, tag_name/0, tag_value/0]).
@@ -37,12 +39,15 @@
 
 -type operation_name() :: atom().
 
+-type start_root_span_options() :: [start_root_span_option()].
+
+-type start_root_span_option() :: {time, erlang:timestamp()}
+                                | {tags, tags()}.
+
 -type start_span_options() :: [start_span_option()].
 
--type start_span_option() :: {tracer, tracer_id()} % optional
-                           | {time, erlang:timestamp()}
-                           | {refs, refs()}
-                           | {tags, tags()}.
+-type start_span_option() :: {refs, refs()}
+                           | start_root_span_option().
 
 -type finish_span_options() :: [finish_span_option()].
 -type finish_span_option() :: {time, erlang:timestamp()}.
@@ -70,14 +75,28 @@
 %%------------------------------------------------------------------------------
 %% Exported Functions
 %%------------------------------------------------------------------------------
+-spec start_root_span(tracer_id(), operation_name()) -> maybe_span().
+start_root_span(Tracer, OperationName) ->
+    start_root_span(Tracer, OperationName, []).
 
--spec start_span(operation_name()) -> maybe_span().
-start_span(OperationName) ->
-    start_span(OperationName, []).
+-spec start_root_span(tracer_id(), operation_name(), start_root_span_options()) ->
+                             maybe_span().
+start_root_span(Tracer, OperationName, Options) ->
+    passage_span:start_root(Tracer, OperationName, Options).
 
--spec start_span(operation_name(), start_span_options()) -> maybe_span().
-start_span(OperationName, Options) ->
-    passage_span:start(OperationName, Options).
+-spec start_span(operation_name(), ref()) -> maybe_span().
+start_span(OperationName, PrimaryReference) ->
+    start_span(OperationName, PrimaryReference, []).
+
+-spec start_span(operation_name(), ref(), start_span_options()) -> maybe_span().
+start_span(OperationName, PrimaryReference, Options0) ->
+    {Refs1, Options2} =
+        case lists:keytake(refs, 1, Options0) of
+            false                            -> {[], Options0};
+            {value, {refs, Refs0}, Options1} -> {Refs0, Options1}
+        end,
+    Options3 = [{refs, [PrimaryReference | Refs1]} | Options2],
+    passage_span:start(OperationName, Options3).
 
 -spec finish_span(maybe_span()) -> ok.
 finish_span(Span) ->
@@ -154,5 +173,5 @@ extract_span(Tracer, Format, IterateFun, Carrier) ->
     Module = passage_registry:get_tracer_module(Tracer),
     case Module:extract_span_context(Format, IterateFun, Carrier) of
         error         -> undefined;
-        {ok, Context} -> passage_span:make(Tracer, Context)
+        {ok, Context} -> passage_span:make_extracted_span(Tracer, Context)
     end.

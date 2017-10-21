@@ -9,12 +9,11 @@
 -type start_option() :: {sampler, passage_sampler:sampler()}
                       | {reporters, [passage_reporter:reporter()]}.
 
--spec make_span_context_state(passage_span:span(), passage:baggage_items()) ->
+-spec make_span_context_state(passage:tracer_id(), passage_span:normalized_refs()) ->
                                      passage_span_context:state().
-make_span_context_state(Span, BaggageItems) ->
-    Tracer = passage_span:get_tracer(Span),
+make_span_context_state(Tracer, Refs) ->
     Module = passage_registry:get_tracer_module(Tracer),
-    Module:make_span_context_state(Span, BaggageItems).
+    Module:make_span_context_state(Refs).
 
 -spec get_sampler(passage:tracer_id()) -> passage_sampler:sampler().
 get_sampler(Tracer) ->
