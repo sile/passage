@@ -1,205 +1,158 @@
+%% @copyright 2017 Takeru Ohta <phjgt308@gmail.com>
+%%
+%% @doc TODO
+%%
 -module(passage).
 
+%%------------------------------------------------------------------------------
+%% Exported API
+%%------------------------------------------------------------------------------
 -export([start_span/1, start_span/2]).
--export([finish_span/0, finish_span/1]).
--export([with_span/2, with_span/3]).
--export([pop_span/0, push_span/1]).
--export([set_tags/1]).
--export([log/1, log/2]).
--export([error_log/1, error_log/2, error_log/3]).
--export([set_baggage_items/1]).
--export([get_baggage_items/0]).
--export([get_span_context/0]).
+-export([finish_span/1, finish_span/2]).
+-export([set_operation_name/2]).
+-export([set_tags/2]).
+-export([set_baggage_items/2]).
+-export([get_baggage_items/1]).
+-export([log/2, log/3]).
+-export([error_log/2, error_log/3, error_log/4, error_log/5]).
+-export([inject_span/4, extract_span/4]).
 
--export_type([operation_name/0]).
--export_type([start_span_option/0]).
--export_type([finish_span_option/0]).
--export_type([log_fields/0, log_field_name/0, log_field_value/0]).
--export_type([log_option/0]).
--export_type([error_log_option/0]).
 -export_type([tracer_id/0]).
--export_type([span/0]).
--export_type([refs/0, ref/0, ref_type/0]).
+-export_type([maybe_span/0]).
+-export_type([operation_name/0]).
+-export_type([start_span_option/0, start_span_options/0]).
+-export_type([finish_span_option/0, finish_span_options/0]).
 -export_type([tags/0, tag_name/0, tag_value/0]).
+-export_type([refs/0, ref/0, ref_type/0]).
 -export_type([baggage_items/0, baggage_item_name/0, baggage_item_value/0]).
+-export_type([log_fields/0, log_field_name/0, log_field_value/0]).
+-export_type([log_option/0, log_options/0]).
+
+%%------------------------------------------------------------------------------
+%% Exported Types
+%%------------------------------------------------------------------------------
+-type tracer_id() :: atom().
+
+-type maybe_span() :: passage_span:span() | undefined.
 
 -type operation_name() :: atom().
 
--type tracer_id() :: atom().
+-type start_span_options() :: [start_span_option()].
 
 -type start_span_option() :: {tracer, tracer_id()} % optional
                            | {time, erlang:timestamp()}
                            | {refs, refs()}
                            | {tags, tags()}.
 
+-type finish_span_options() :: [finish_span_option()].
 -type finish_span_option() :: {time, erlang:timestamp()}.
 
--type span() :: passage_span:maybe_span().
--type span_context() :: passage_span:maybe_span_context().
-
 -type refs() :: [ref()].
--type ref() :: {ref_type(), span() | span_context()}.
+-type ref() :: {ref_type(), maybe_span()}.
 -type ref_type() :: child_of | follows_from.
 
 -type tags() :: #{tag_name() => tag_value()}.
 -type tag_name() :: atom().
 -type tag_value() :: term().
 
--type log_fields() :: #{log_field_name() => log_field_value()}.
--type log_field_name() :: atom().
--type log_field_value() :: term().
-
--type log_option() :: {time, erlang:timestamp()}.
-
--type error_log_option() :: log_option()
-                          | {kind, atom()}
-                          | stacktrace
-                          | {stacktrace, [erlang:passage_item()]}.
-
 -type baggage_items() :: #{baggage_item_name() => baggage_item_value()}.
 -type baggage_item_name() :: binary().
 -type baggage_item_value() :: binary().
 
--define(ANCESTORS_KEY, passage_span_ancestors).
+-type log_fields() :: #{log_field_name() => log_field_value()}.
+-type log_field_name() :: atom().
+-type log_field_value() :: term().
 
--spec start_span(operation_name()) -> ok.
+-type log_options() :: [log_option()].
+
+-type log_option() :: {time, erlang:timestamp()}.
+
+%%------------------------------------------------------------------------------
+%% Exported Functions
+%%------------------------------------------------------------------------------
+
+-spec start_span(operation_name()) -> maybe_span().
 start_span(OperationName) ->
     start_span(OperationName, []).
 
--spec start_span(operation_name(), [start_span_option()]) -> ok.
+-spec start_span(operation_name(), start_span_options()) -> maybe_span().
 start_span(OperationName, Options) ->
-    Ancestors = get_ancestors(),
-    Options1 =
-        case Ancestors of
-            []              -> Options;
-            [undefined | _] -> Options;
-            [Parent    | _] ->
-                Refs = proplists:get_value(refs, Options, []),
-                [{refs, [{child_of, Parent} | Refs]} | Options]
-        end,
-    Span = passage_span:start(OperationName, Options1),
-    put_ancestors([Span | Ancestors]).
+    passage_span:start(OperationName, Options).
 
--spec finish_span() -> ok.
-finish_span() ->
-    finish_span([]).
+-spec finish_span(maybe_span()) -> ok.
+finish_span(Span) ->
+    finish_span(Span, []).
 
--spec finish_span([finish_span_option()]) -> ok.
-finish_span(Options) ->
-    Span = pop_span(),
+-spec finish_span(maybe_span(), finish_span_options()) -> ok.
+finish_span(undefined, _)  -> ok;
+finish_span(Span, Options) ->
     passage_span:finish(Span, Options).
 
--spec with_span(operation_name(), Fun) -> Result when
-      Fun :: fun (() -> Result),
-      Result :: term().
-with_span(OperationName, Fun) ->
-    with_span(OperationName, [], Fun).
+-spec set_operation_name(maybe_span(), operation_name()) -> maybe_span().
+set_operation_name(undefined, _) -> undefined;
+set_operation_name(Span, Name)   -> passage_span:set_operation_name(Span, Name).
 
--spec with_span(operation_name(), [start_span_option()], Fun) -> Result when
-      Fun :: fun (() -> Result),
-      Result :: term().
-with_span(OperationName, Options, Fun) ->
-    try
-        start_span(OperationName, Options),
-        Fun()
-    after
-        finish_span()
+-spec set_tags(maybe_span(), tags()) -> maybe_span().
+set_tags(undefined, _) -> undefined;
+set_tags(Span, Tags)   -> passage_span:set_tags(Span, Tags).
+
+-spec set_baggage_items(maybe_span(), baggage_items()) -> ok.
+set_baggage_items(undefined, _) -> undefined;
+set_baggage_items(Span, Items)  -> passage_span:set_baggage_items(Span, Items).
+
+-spec get_baggage_items(maybe_span()) -> baggage_items().
+get_baggage_items(undefined) -> #{};
+get_baggage_items(Span)      -> passage_span:get_baggage_items(Span).
+
+-spec log(maybe_span(), log_fields()) -> maybe_span().
+log(Span, Fields) ->
+    log(Span, Fields, []).
+
+-spec log(maybe_span(), log_fields(), log_options()) -> maybe_span().
+log(undefined, _, _)       -> undefined;
+log(Span, Fields, Options) -> passage_span:log(Span, Fields, Options).
+
+-spec error_log(maybe_span(), iodata()) -> maybe_span().
+error_log(Span, Message) ->
+    error_log(Span, Message, []).
+
+-spec error_log(maybe_span(), io:format(), [term()]) -> maybe_span().
+error_log(Span, Format, Data) ->
+    error_log(Span, Format, Data, #{}).
+
+-spec error_log(maybe_span(), io:format(), [term()], log_fields()) -> maybe_span().
+error_log(Span, Format, Data, Fields) ->
+    error_log(Span, Format, Data, Fields, []).
+
+-spec error_log(maybe_span(), io:format(), [term()], log_fields(), log_options()) ->
+                       maybe_span().
+error_log(undefined, _, _, _, _)               -> undefined;
+error_log(Span0, Format, Data, Fields0, Options) ->
+    Message = io_lib:format(Format, Data),
+    Fields1 = maps:merge(Fields0, #{event => error, message => Message}),
+    Span1 = passage_span:log(Span0, Fields1, Options),
+    passage_span:set_tags(#{error => true}, Span1).
+
+-spec inject_span(Span, Format, InjectFun, Carrier) -> Carrier when
+      Span :: maybe_span(),
+      Format :: passage_span_context:format(),
+      InjectFun :: passage_span_context:inject_fun(),
+      Carrier :: passage_span_context:carrier().
+inject_span(undefined, _, _, Carrier)         -> Carrier;
+inject_span(Span, Format, InjectFun, Carrier) ->
+    Context = passage_span:get_context(Span),
+    Tracer = passage_span:get_tracer(Span),
+    Module = passage_registry:get_tracer_module(Tracer),
+    Module:inject_span_context(Context, Format, InjectFun, Carrier).
+
+-spec extract_span(Tracer, Format, IterateFun, Carrier) -> maybe_span() when
+      Tracer :: tracer_id(),
+      Format :: passage_span_context:format(),
+      IterateFun :: passage_span_context:iterate_fun(),
+      Carrier :: passage_span_context:carrier().
+extract_span(Tracer, Format, IterateFun, Carrier) ->
+    Module = passage_registry:get_tracer_module(Tracer),
+    case Module:extract_span_context(Format, IterateFun, Carrier) of
+        error         -> undefined;
+        {ok, Context} -> passage_span:make(Tracer, Context)
     end.
-
--spec set_tags(tags()) -> ok.
-set_tags(Tags) ->
-    update_current_span(fun (Span) -> passage_span:set_tags(Span, Tags) end).
-
--spec log(log_fields()) -> ok.
-log(Fields) ->
-    log(Fields, []).
-
--spec log(log_fields(), [log_option()]) -> ok.
-log(Fields, Options) ->
-    update_current_span(fun (Span) -> passage_span:log(Span, Fields, Options) end).
-
--spec error_log(iodata()) -> ok.
-error_log(Message) ->
-    error_log(Message, []).
-
--spec error_log(io:format(), [term()]) -> ok.
-error_log(Format, Data) ->
-    error_log(Format, Data, []).
-
--spec error_log(io:format(), [term()], [error_log_option()]) -> ok.
-error_log(Format, Data, Options) ->
-    update_current_span(
-      fun (Span0) ->
-              Message = io_lib:format(Format, Data),
-              Fields =
-                  [
-                   {event, error},
-                   {message, Message}
-                  ] ++
-                  proplists:lookup_all(kind, Options) ++
-                  case proplists:lookup(stacktrace, Options) of
-                      none      -> [];
-                      {_, true} ->
-                          Stack = try error(dummy) catch _:_ -> erlang:get_stacktrace() end,
-                          [{stack, Stack}];
-                      {_, Stack} -> [{stack, Stack}]
-                  end,
-              Span1 = passage_span:log(Span0, maps:from_list(Fields), Options),
-              passage_span:set_tags(#{error => true}, Span1)
-      end).
-
--spec set_baggage_items(baggage_items()) -> ok.
-set_baggage_items(Items) ->
-    update_current_span(fun (Span) -> passage_span:set_baggage_items(Span, Items) end).
-
--spec get_baggage_items() -> baggage_items().
-get_baggage_items() ->
-    Span = current_span(),
-    passage_span:get_baggage_items(Span).
-
--spec pop_span() -> span().
-pop_span() ->
-    case get(?ANCESTORS_KEY) of
-        undefined      -> undefined;
-        [Span | Spans] ->
-            put_ancestors(Spans),
-            Span
-    end.
-
--spec push_span(span()) -> ok.
-push_span(Span) ->
-    put_ancestors([Span | get_ancestors()]).
-
--spec get_span_context() -> span_context().
-get_span_context() ->
-    passage_span:get_context(current_span()).
-
--spec update_current_span(Fun) -> ok when
-      Fun :: fun ((passage_span:span()) -> passage_span:span()).
-update_current_span(Fun) ->
-    case get(?ANCESTORS_KEY) of
-        undefined       -> ok;
-        [undefined | _] -> ok;
-        [Span0 | Spans] ->
-            Span1 = Fun(Span0),
-            put_ancestors([Span1 | Spans])
-    end.
-
--spec current_span() -> span().
-current_span() ->
-    case get(?ANCESTORS_KEY) of
-        undefined  -> undefined;
-        [Span | _] -> Span
-    end.
-
--spec get_ancestors() -> [span()].
-get_ancestors() ->
-    case get(?ANCESTORS_KEY) of
-        undefined -> [];
-        Ancestors -> Ancestors
-    end.
-
--spec put_ancestors([span()]) -> ok.
-put_ancestors(Ancestors) ->
-    put(?ANCESTORS_KEY, Ancestors),
-    ok.

@@ -1,4 +1,3 @@
-%% TODO: s/passage_tracer/passage_span_context/
 -module(passage_tracer).
 
 -export([start/2, start/3]).
@@ -9,24 +8,6 @@
 
 -type start_option() :: {sampler, passage_sampler:sampler()}
                       | {reporters, [passage_reporter:reporter()]}.
-
--callback make_span_context_state(passage_span:span(), passage:baggage_items()) ->
-    passage_span_context:state().
-
--type format() :: text_map | http_header | binary.
-
--type carrier() :: term().
-
--type key() :: binary().
--type value() :: binary().
--type inject_fun() :: fun ((key(), value(), carrier()) -> carrier()).
--type extract_fun() :: fun ((carrier()) -> {ok, key(), value(), carrier()} | error).
-
--callback inject_span_context(passage_span_context:context(), format(),
-                              carrier(), inject_fun()) -> carrier().
-
--callback extract_span_context(format(), carrier(), extract_fun()) ->
-    {ok, passage_span_context:context()} | error.
 
 -spec make_span_context_state(passage_span:span(), passage:baggage_items()) ->
                                      passage_span_context:state().

@@ -2,8 +2,10 @@
 
 -include("opentracing.hrl").
 
+-export([make/2]). % TODO
 -export([start/2]).
 -export([finish/2]).
+-export([set_operation_name/2]).
 -export([set_tags/2]).
 -export([log/3]).
 -export([set_baggage_items/2]).
@@ -36,6 +38,17 @@
 -opaque span() :: #?SPAN{}.
 -type maybe_span() :: span() | undefined.
 
+-spec make(passage:tracer_id(), passage_span_context:context()) -> span().
+make(TracerId, Context) ->
+    #?SPAN{
+        tracer = TracerId,
+        operation_name = undefined,
+        start_time = {0,0,0},
+        finish_time = {0,0,0},
+        context = Context
+       }.
+
+%% TODO: move
 -spec start(passage:operation_name(), [passage:start_span_option()]) -> maybe_span().
 start(OperationName, Options) ->
     StartTime =
@@ -76,6 +89,10 @@ finish(Span0, Options) ->
     Span1 = Span0#?SPAN{finish_time = FinishTime},
     Reporter = passage_registry:get_reporter(Span1#?SPAN.tracer),
     passage_reporter:report(Reporter, Span1).
+
+-spec set_operation_name(span(), passage:operation_name()) -> span().
+set_operation_name(Span, OperationName) ->
+    Span#?SPAN{operation_name = OperationName}.
 
 -spec set_tags(maybe_span(), passage:tags()) -> maybe_span().
 set_tags(undefined, _Tags) -> undefined;
