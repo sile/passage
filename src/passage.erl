@@ -161,8 +161,10 @@ inject_span(undefined, _, _, Carrier)         -> Carrier;
 inject_span(Span, Format, InjectFun, Carrier) ->
     Context = passage_span:get_context(Span),
     Tracer = passage_span:get_tracer(Span),
-    Module = passage_registry:get_tracer_module(Tracer),
-    Module:inject_span_context(Context, Format, InjectFun, Carrier).
+    case passage_tracer_registry:get_span_context_module(Tracer) of
+        error        -> Carrier;
+        {ok, Module} -> Module:inject_span_context(Context, Format, InjectFun, Carrier)
+    end.
 
 -spec extract_span(Tracer, Format, IterateFun, Carrier) -> maybe_span() when
       Tracer :: tracer_id(),
@@ -170,8 +172,11 @@ inject_span(Span, Format, InjectFun, Carrier) ->
       IterateFun :: passage_span_context:iterate_fun(),
       Carrier :: passage_span_context:carrier().
 extract_span(Tracer, Format, IterateFun, Carrier) ->
-    Module = passage_registry:get_tracer_module(Tracer),
-    case Module:extract_span_context(Format, IterateFun, Carrier) of
-        error         -> undefined;
-        {ok, Context} -> passage_span:make_extracted_span(Tracer, Context)
+    case passage_tracer_registry:get_span_context_module(Tracer) of
+        error        -> undefined;
+        {ok, Module} ->
+            case Module:extract_span_context(Format, IterateFun, Carrier) of
+                error         -> undefined;
+                {ok, Context} -> passage_span:make_extracted_span(Tracer, Context)
+            end
     end.

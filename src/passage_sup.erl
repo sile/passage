@@ -11,8 +11,8 @@ start_link() ->
 
 init([]) ->
     Registry = #{
-      id      => passage_registry,
-      start   => {passage_registry, start_link, []},
+      id      => passage_tracer_registry,
+      start   => {passage_tracer_registry, start_link, []},
       restart => permanent
      },
     {ok, {#{}, [Registry]} }.

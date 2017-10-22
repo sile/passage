@@ -105,15 +105,18 @@ start_root(Tracer, OperationName, Options) ->
     case is_sampled(Tracer, OperationName, Tags) of
         false -> undefined;
         true  ->
-            Context = passage_span_context:make(Tracer, []),
-            StartTime = get_time(Options),
-            #?SPAN{
-                tracer         = Tracer,
-                operation_name = OperationName,
-                start_time     = StartTime,
-                tags           = Tags,
-                context        = Context
-               }
+            case make_span_context(Tracer, []) of
+                error         -> undefined;
+                {ok, Context} ->
+                    StartTime = get_time(Options),
+                    #?SPAN{
+                        tracer         = Tracer,
+                        operation_name = OperationName,
+                        start_time     = StartTime,
+                        tags           = Tags,
+                        context        = Context
+                       }
+            end
     end.
 
 %% @private
@@ -124,17 +127,20 @@ start(OperationName, Options) ->
         []                 -> undefined;
         [{_, Primary} | _] ->
             Tracer = get_tracer(Primary),
-            Context = passage_span_context:make(Tracer, Refs),
-            Tags = proplists:get_value(tags, Options, #{}),
-            StartTime = get_time(Options),
-            #?SPAN{
-                tracer         = Tracer,
-                operation_name = OperationName,
-                start_time     = StartTime,
-                refs           = Refs,
-                tags           = Tags,
-                context        = Context
-               }
+            case make_span_context(Tracer, Refs) of
+                error         -> undefined;
+                {ok, Context} ->
+                    Tags = proplists:get_value(tags, Options, #{}),
+                    StartTime = get_time(Options),
+                    #?SPAN{
+                        tracer         = Tracer,
+                        operation_name = OperationName,
+                        start_time     = StartTime,
+                        refs           = Refs,
+                        tags           = Tags,
+                        context        = Context
+                       }
+            end
     end.
 
 %% @private
@@ -145,8 +151,10 @@ finish(#?SPAN{operation_name = undefined, start_time = {0, 0, 0}}, _) ->
 finish(Span0, Options) ->
     FinishTime = get_time(Options),
     Span1 = Span0#?SPAN{finish_time = FinishTime},
-    Reporter = passage_registry:get_reporter(Span1#?SPAN.tracer),
-    passage_reporter:report(Reporter, Span1).
+    case passage_tracer_registry:get_reporter(Span1#?SPAN.tracer) of
+        error          -> ok;
+        {ok, Reporter} -> passage_reporter:report(Reporter, Span1)
+    end.
 
 %% @private
 -spec set_operation_name(span(), passage:operation_name()) -> span().
@@ -188,8 +196,10 @@ is_sampled(Tracer, OperationName, Tags) ->
     case maps:find(?TAG_SAMPLING_PRIORITY, Tags) of
         {ok, V} -> 0 < V;
         _       ->
-            Sampler = passage_tracer:get_sampler(Tracer),
-            passage_sampler:is_sampled(Sampler, OperationName, Tags)
+            case passage_tracer_registry:get_sampler(Tracer) of
+                error         -> false;
+                {ok, Sampler} -> passage_sampler:is_sampled(Sampler, OperationName, Tags)
+            end
     end.
 
 -spec get_time([{time, erlang:timestamp()}]) -> erlang:timestamp().
@@ -197,4 +207,12 @@ get_time(Options) ->
     case lists:keyfind(time, 1, Options) of
         false     -> os:timestamp();
         {_, Time} -> Time
+    end.
+
+-spec make_span_context(passage:tracer_id(), passage_span:normalized_refs()) ->
+                               {ok, passage_span_context:context()} | error.
+make_span_context(Tracer, Refs) ->
+    case passage_tracer_registry:get_span_context_module(Tracer) of
+        error        -> error;
+        {ok, Module} -> {ok, passage_span_context:make(Module, Refs)}
     end.

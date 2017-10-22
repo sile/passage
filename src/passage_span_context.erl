@@ -11,6 +11,7 @@
 -export([get_state/1]).
 
 -export_type([context/0]).
+-export_type([implementation_module/0]).
 -export_type([state/0]).
 -export_type([format/0]).
 -export_type([carrier/0]).
@@ -47,6 +48,8 @@
 %%------------------------------------------------------------------------------
 -opaque context() :: #?CONTEXT{}.
 
+-type implementation_module() :: module().
+
 -type state() :: term().
 
 -type format() :: text_map | http_header | binary.
@@ -73,9 +76,8 @@ get_state(Context) ->
 %% Application Internal Functions
 %%------------------------------------------------------------------------------
 %% @private
--spec make(passage:tracer_id(), passage_span:normalized_refs()) -> context().
-make(Tracer, Refs) ->
-    Module = passage_registry:get_tracer_module(Tracer),
+-spec make(implementation_module(), passage_span:normalized_refs()) -> context().
+make(Module, Refs) ->
     State = Module:make_span_context_state(Refs),
     BaggageItems = lists:foldr(fun maps:merge/2, #{}, Refs),
     #?CONTEXT{state = State, baggage_items = BaggageItems}.
