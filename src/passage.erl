@@ -150,7 +150,7 @@ error_log(Span0, Format, Data, Fields0, Options) ->
     Message = io_lib:format(Format, Data),
     Fields1 = maps:merge(Fields0, #{event => error, message => Message}),
     Span1 = passage_span:log(Span0, Fields1, Options),
-    passage_span:set_tags(#{error => true}, Span1).
+    passage_span:set_tags(Span1, #{error => true}).
 
 -spec inject_span(Span, Format, InjectFun, Carrier) -> Carrier when
       Span :: maybe_span(),

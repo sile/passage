@@ -10,6 +10,7 @@
 -export([start_root_span/2, start_root_span/3]).
 -export([start_span/1, start_span/2]).
 -export([finish_span/0, finish_span/1]).
+-export([with_root_span/3, with_root_span/4]).
 -export([with_span/2, with_span/3]).
 -export([current_span/0]).
 -export([set_operation_name/1]).
@@ -52,7 +53,7 @@ start_span(OperationName, Options) ->
                 Refs = proplists:get_value(refs, Options, []),
                 [{refs, [{child_of, Parent} | Refs]} | Options]
         end,
-    case passage:start_span(OperationName, Options1) of
+    case passage_span:start(OperationName, Options1) of
         undefined -> ok;
         Span      -> put_ancestors([Span | Ancestors])
     end.
@@ -65,6 +66,23 @@ finish_span() ->
 finish_span(Options) ->
     Span = pop_span(),
     passage:finish_span(Span, Options).
+
+-spec with_root_span(passage:operation_name(), passage:tracer_id(), Fun) -> Result when
+      Fun :: fun (() -> Result),
+      Result :: term().
+with_root_span(OperationName, Tracer, Fun) ->
+    with_root_span(OperationName, Tracer, [], Fun).
+
+-spec with_root_span(passage:operation_name(), passage:tracer_id(), passage:start_span_options(), Fun) -> Result when
+      Fun :: fun (() -> Result),
+      Result :: term().
+with_root_span(OperationName, Tracer, Options, Fun) ->
+    try
+        start_root_span(OperationName, Tracer, Options),
+        Fun()
+    after
+        finish_span()
+    end.
 
 -spec with_span(passage:operation_name(), Fun) -> Result when
       Fun :: fun (() -> Result),

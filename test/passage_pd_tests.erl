@@ -1,12 +1,12 @@
 %% @copyright 2017 Takeru Ohta <phjgt308@gmail.com>
--module(passage_tests).
+-module(passage_pd_tests).
 
 -include_lib("eunit/include/eunit.hrl").
 
 %%------------------------------------------------------------------------------
 %% Test Cases
 %%------------------------------------------------------------------------------
-passage_test_() ->
+passage_pd_test_() ->
     {foreach,
      fun () -> ok = application:start(passage) end,
      fun (_) -> ok = application:stop(passage) end,
@@ -14,10 +14,8 @@ passage_test_() ->
       {"basic test",
        fun () ->
                ok = start_test_tracer(),
-               ?assertEqual([test_tracer], passage_tracer_registry:which_tracers()),
-
-               RootSpan = passage:start_root_span(basic_test, test_tracer),
-               passage:finish_span(RootSpan),
+               ok = passage_pd:start_root_span(basic_test, test_tracer),
+               ok = passage_pd:finish_span(),
 
                [FinishedSpan] = finished_spans(),
                ?assertEqual(basic_test, passage_span:get_operation_name(FinishedSpan)),
@@ -30,10 +28,27 @@ passage_test_() ->
        fun () ->
                ok = start_test_tracer(),
 
-               RootSpan = passage:start_root_span(root, test_tracer),
-               ChildSpan = passage:start_span(child, {child_of, RootSpan}),
-               passage:finish_span(ChildSpan),
-               passage:finish_span(RootSpan),
+               ok = passage_pd:start_root_span(root, test_tracer),
+               ok = passage_pd:start_span(child),
+               ok = passage_pd:finish_span(),
+               ok = passage_pd:finish_span(),
+
+               [FinishedChildSpan, FinishedRootSpan] = finished_spans(),
+               ?assertEqual(child, passage_span:get_operation_name(FinishedChildSpan)),
+               ?assertMatch([{child_of, _}], passage_span:get_refs(FinishedChildSpan)),
+               [{child_of, ParentSpan}] = passage_span:get_refs(FinishedChildSpan),
+               ?assertEqual(root, passage_span:get_operation_name(ParentSpan)),
+
+               ?assertEqual(root, passage_span:get_operation_name(FinishedRootSpan))
+       end},
+      {"with span",
+       fun () ->
+               ok = start_test_tracer(),
+               passage_pd:with_root_span(
+                 root, test_tracer,
+                 fun () ->
+                         passage_pd:with_span(child, fun () -> ok end)
+                 end),
 
                [FinishedChildSpan, FinishedRootSpan] = finished_spans(),
                ?assertEqual(child, passage_span:get_operation_name(FinishedChildSpan)),
@@ -46,22 +61,21 @@ passage_test_() ->
       {"operation name",
        fun () ->
                ok = start_test_tracer(),
-               Span0 = passage:start_root_span(root, test_tracer),
-               Span1 = passage:set_operation_name(Span0, foo),
+               ok = passage_pd:start_root_span(root, test_tracer),
+               ok = passage_pd:set_operation_name(foo),
 
-               passage:finish_span(Span1),
+               passage_pd:finish_span(),
                [FinishedSpan] = finished_spans(),
                ?assertEqual(foo, passage_span:get_operation_name(FinishedSpan))
        end},
       {"tag",
        fun () ->
                ok = start_test_tracer(),
-               Span0 =
-                   passage:start_root_span(
-                     root, test_tracer, [{tags, #{foo => bar, 111 => 222}}]),
-               Span1 = passage:set_tags(Span0, #{baz => qux, 111 => 333}),
+               ok = passage_pd:start_root_span(
+                      root, test_tracer, [{tags, #{foo => bar, 111 => 222}}]),
+               ok = passage_pd:set_tags(#{baz => qux, 111 => 333}),
 
-               passage:finish_span(Span1),
+               ok = passage_pd:finish_span(),
                [FinishedSpan] = finished_spans(),
                ?assertEqual(#{foo => bar, baz => qux, 111 => 333},
                             passage_span:get_tags(FinishedSpan))
@@ -69,25 +83,24 @@ passage_test_() ->
       {"baggage item",
        fun () ->
                ok = start_test_tracer(),
-               RootSpan0 = passage:start_root_span(root, test_tracer),
-               RootSpan1 = passage:set_baggage_items(RootSpan0, #{<<"foo">> => <<"bar">>}),
+               ok = passage_pd:start_root_span(root, test_tracer),
+               ok = passage_pd:set_baggage_items(#{<<"foo">> => <<"bar">>}),
 
-               ChildSpan0 = passage:start_span(child, {child_of, RootSpan1}),
-               ?assertEqual(#{<<"foo">> => <<"bar">>},
-                            passage:get_baggage_items(ChildSpan0)),
+               ok = passage_pd:start_span(child),
+               ?assertEqual(#{<<"foo">> => <<"bar">>}, passage_pd:get_baggage_items()),
 
-               ChildSpan1 = passage:set_baggage_items(ChildSpan0, #{<<"baz">> => <<"qux">>}),
+               ok = passage_pd:set_baggage_items(#{<<"baz">> => <<"qux">>}),
                ?assertEqual(#{<<"foo">> => <<"bar">>, <<"baz">> => <<"qux">>},
-                            passage:get_baggage_items(ChildSpan1))
+                            passage_pd:get_baggage_items())
        end},
       {"log",
        fun () ->
                ok = start_test_tracer(),
-               Span0 = passage:start_root_span(root, test_tracer),
-               Span1 = passage:log(Span0, #{hello => world}, [{time, {1, 2, 3}}]),
-               Span2 = passage:log(Span1, #{foo => bar}),
+               ok = passage_pd:start_root_span(root, test_tracer),
+               ok = passage_pd:log(#{hello => world}, [{time, {1, 2, 3}}]),
+               ok = passage_pd:log(#{foo => bar}),
 
-               passage:finish_span(Span2),
+               ok = passage_pd:finish_span(),
                [FinishedSpan] = finished_spans(),
                ?assertMatch([{#{foo := bar}, {_, _, _}},
                              {#{hello := world}, {1, 2, 3}}],
@@ -96,10 +109,10 @@ passage_test_() ->
       {"error log",
        fun () ->
                ok = start_test_tracer(),
-               Span0 = passage:start_root_span(root, test_tracer),
-               Span1 = passage:error_log(Span0, "Hello World", [], #{kind => greeting}),
+               ok = passage_pd:start_root_span(root, test_tracer),
+               ok = passage_pd:error_log("Hello World", [], #{kind => greeting}),
 
-               passage:finish_span(Span1),
+               ok = passage_pd:finish_span(),
                [FinishedSpan] = finished_spans(),
                ?assertMatch([{#{event := error, kind := greeting, message := "Hello World"},
                               {_, _, _}}],
@@ -111,10 +124,9 @@ passage_test_() ->
        fun () ->
                ok = start_test_tracer(),
 
-               RootSpan =
-                   passage:start_root_span(
-                     basic_test, test_tracer, [{tags, #{'sampling.priority' => 0}}]),
-               passage:finish_span(RootSpan),
+               ok = passage_pd:start_root_span(
+                      basic_test, test_tracer, [{tags, #{'sampling.priority' => 0}}]),
+               ok = passage_pd:finish_span(),
                ?assertEqual([], finished_spans())
        end},
       {"'sampling.priority' = 1",
@@ -125,44 +137,30 @@ passage_test_() ->
                ok = passage_tracer_registry:register(
                       test_tracer, Context, Sampler, Reporter),
 
-               RootSpan =
-                   passage:start_root_span(
-                     basic_test, test_tracer, [{tags, #{'sampling.priority' => 1}}]),
-               passage:finish_span(RootSpan),
+               ok = passage_pd:start_root_span(
+                      basic_test, test_tracer, [{tags, #{'sampling.priority' => 1}}]),
+               ok = passage_pd:finish_span(),
                ?assertMatch([_Span], finished_spans())
        end},
       {"unsampled parent",
        fun () ->
-               Span0 = passage:start_span(child, {child_of, undefined}),
-               Span1 = passage:set_operation_name(Span0, foo),
-               Span2 = passage:set_tags(Span1, #{111 => 222}),
-               Span3 = passage:set_baggage_items(Span2, #{<<"a">> => <<"b">>}),
-               Span4 = passage:log(Span3, #{event => debug}),
+               ok = passage_pd:start_span(child),
+               ok = passage_pd:set_operation_name(foo),
+               ok = passage_pd:set_tags(#{111 => 222}),
+               ok = passage_pd:set_baggage_items(#{<<"a">> => <<"b">>}),
+               ok = passage_pd:log(#{event => debug}),
 
-               passage:finish_span(Span4),
+               ok = passage_pd:finish_span(),
                ?assertEqual([], finished_spans())
        end},
       {"additional references",
        fun () ->
                ok = start_test_tracer(),
                RootSpan = passage:start_root_span(root, test_tracer),
-               Span = passage:start_span(
-                        child, {child_of, undefined}, [{refs, [{follows_from, RootSpan}]}]),
 
-               passage:finish_span(Span),
+               ok = passage_pd:start_span(child, [{refs, [{follows_from, RootSpan}]}]),
+               ok = passage_pd:finish_span(),
                ?assertMatch([_Span], finished_spans())
-       end},
-      {"injection and extraction (noop)",
-       fun () ->
-               ok = start_test_tracer(),
-               Span = passage:start_root_span(root, test_tracer),
-
-               InjectFun = fun (_Key, _Value, Carrier) -> Carrier end,
-               ?assertEqual(#{}, passage:inject_span(Span, text_map, InjectFun, #{})),
-
-               IterateFun = fun (_) -> error end,
-               ?assertEqual(undefined,
-                            passage:extract_span(test_tracer, text_map, IterateFun, #{}))
        end}
       ]}.
 

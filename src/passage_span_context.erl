@@ -79,7 +79,13 @@ get_state(Context) ->
 -spec make(implementation_module(), passage_span:normalized_refs()) -> context().
 make(Module, Refs) ->
     State = Module:make_span_context_state(Refs),
-    BaggageItems = lists:foldr(fun maps:merge/2, #{}, Refs),
+    BaggageItems =
+        lists:foldl(
+          fun ({_, Span}, Acc) ->
+                  maps:merge(passage_span:get_baggage_items(Span), Acc)
+          end,
+          #{},
+          Refs),
     #?CONTEXT{state = State, baggage_items = BaggageItems}.
 
 %% @private

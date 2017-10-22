@@ -122,7 +122,7 @@ start_root(Tracer, OperationName, Options) ->
 %% @private
 -spec start(passage:operation_name(), passage:start_span_options()) -> passage:maybe_span().
 start(OperationName, Options) ->
-    Refs = lists:keydelete(undefined, 2, proplists:get_value(refs, Options, [])),
+    Refs = normalize_refs(proplists:get_value(refs, Options, [])),
     case Refs of
         []                 -> undefined;
         [{_, Primary} | _] ->
@@ -216,3 +216,13 @@ make_span_context(Tracer, Refs) ->
         error        -> error;
         {ok, Module} -> {ok, passage_span_context:make(Module, Refs)}
     end.
+
+-spec normalize_refs([passage:maybe_span()]) -> [span()].
+normalize_refs(Refs) ->
+    lists:filtermap(
+      fun ({_, undefined}) -> false;
+          ({Type, Span0})  ->
+              Span1 = Span0#?SPAN{refs = [], tags = #{}, logs = []},
+              {true, {Type, Span1}}
+      end,
+      Refs).
