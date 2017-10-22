@@ -3,7 +3,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 basic_test() ->
-    application:ensure_all_started(passage),
+    {ok, _} = application:ensure_all_started(passage),
 
     Context = passage_span_context_null,
     Sampler = passage_sampler_all:new(),
@@ -19,4 +19,6 @@ basic_test() ->
         {span, FinishedSpan} ->
             ?assertEqual(passage_span:get_operation_name(RootSpan),
                          passage_span:get_operation_name(FinishedSpan))
-    end.
+    end,
+
+    ok = application:stop(passage).

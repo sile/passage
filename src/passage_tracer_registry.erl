@@ -76,20 +76,16 @@ which_tracers() ->
 -spec get_span_context_module(passage:tracer_id()) -> {ok, Module} | error when
       Module :: passage_span_context:implementation_module().
 get_span_context_module(Tracer) ->
-    try ets:lookup(?TABLE, {module, Tracer}) of
+    case ets:lookup(?TABLE, {module, Tracer}) of
         [{_, Module}] -> {ok, Module};
         _             -> error
-    catch
-        error:badarg -> error
     end.
 
 -spec get_sampler(passage:tracer_id()) -> {ok, passage_sampler:sampler()} | error.
 get_sampler(Tracer) ->
-    try ets:lookup(?TABLE, {sampler, Tracer}) of
+    case ets:lookup(?TABLE, {sampler, Tracer}) of
         [{_, Sampler}] -> {ok, Sampler};
         _              -> error
-    catch
-        error:badarg -> error
     end.
 
 -spec set_sampler(passage:tracer_id(), passage_sampler:sampler()) -> ok.
@@ -98,11 +94,9 @@ set_sampler(Tracer, Sampler) ->
 
 -spec get_reporter(passage:tracer_id()) -> {ok, passage_reporter:reporter()} | error.
 get_reporter(TracerId) ->
-    try ets:lookup(?TABLE, {reporter, TracerId}) of
+    case ets:lookup(?TABLE, {reporter, TracerId}) of
         [{_, Reporter}] -> {ok, Reporter};
         _               -> error
-    catch
-        error:badarg -> error
     end.
 
 -spec set_reporter(passage:tracer_id(), passage_reporter:reporter()) -> ok.
