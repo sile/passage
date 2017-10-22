@@ -115,7 +115,7 @@ set_operation_name(Span, Name)   -> passage_span:set_operation_name(Span, Name).
 set_tags(undefined, _) -> undefined;
 set_tags(Span, Tags)   -> passage_span:set_tags(Span, Tags).
 
--spec set_baggage_items(maybe_span(), baggage_items()) -> ok.
+-spec set_baggage_items(maybe_span(), baggage_items()) -> maybe_span().
 set_baggage_items(undefined, _) -> undefined;
 set_baggage_items(Span, Items)  -> passage_span:set_baggage_items(Span, Items).
 

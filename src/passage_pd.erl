@@ -32,7 +32,7 @@
 start_root_span(OperationName, Tracer) ->
     start_root_span(OperationName, Tracer, []).
 
--spec start_root_span(passage:operation_name(), passage:tracer_id(), passge:start_root_span_options()) -> ok.
+-spec start_root_span(passage:operation_name(), passage:tracer_id(), passage:start_root_span_options()) -> ok.
 start_root_span(OperationName, Tracer, Options) ->
     case passage:start_root_span(OperationName, Tracer, Options) of
         undefined -> ok;
@@ -62,7 +62,7 @@ start_span(OperationName, Options) ->
 finish_span() ->
     finish_span([]).
 
--spec finish_span(passage:finish_span_option()) -> ok.
+-spec finish_span(passage:finish_span_options()) -> ok.
 finish_span(Options) ->
     Span = pop_span(),
     passage:finish_span(Span, Options).
@@ -131,7 +131,7 @@ get_baggage_items() ->
 log(Fields) ->
     log(Fields, []).
 
--spec log(passage:log_fields(), passage:log_option()) -> ok.
+-spec log(passage:log_fields(), passage:log_options()) -> ok.
 log(Fields, Options) ->
     update_current_span(fun (Span) -> passage:log(Span, Fields, Options) end).
 

@@ -16,6 +16,7 @@
 -export_type([format/0]).
 -export_type([carrier/0]).
 -export_type([inject_fun/0]).
+-export_type([iterate_fun/0]).
 
 %%------------------------------------------------------------------------------
 %% Application Internal API

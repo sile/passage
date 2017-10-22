@@ -46,7 +46,7 @@
           refs = [] :: normalized_refs(),
           tags = #{} :: passage:tags(),
           logs = [] :: [log()],
-          context :: passage_span_context:maybe_context()
+          context :: passage_span_context:context()
         }).
 
 %%------------------------------------------------------------------------------
@@ -217,7 +217,7 @@ make_span_context(Tracer, Refs) ->
         {ok, Module} -> {ok, passage_span_context:make(Module, Refs)}
     end.
 
--spec normalize_refs([passage:maybe_span()]) -> [span()].
+-spec normalize_refs([passage:maybe_span()]) -> normalized_refs().
 normalize_refs(Refs) ->
     lists:filtermap(
       fun ({_, undefined}) -> false;
