@@ -59,6 +59,8 @@ start_link() ->
 register(Tracer, Module, Sampler, Reporter) ->
     Args = [Tracer, Module, Sampler, Reporter],
     is_atom(Tracer) orelse error(badarg, Args),
+    is_atom(Module) orelse error(badarg, Args),
+    passage_sampler:is_sampler(Sampler) orelse error(badarg, Args),
     passage_reporter:is_reporter(Reporter) orelse error(badarg, Args),
 
     gen_server:call(?MODULE, {register, {Tracer, Module, Sampler, Reporter}}).
