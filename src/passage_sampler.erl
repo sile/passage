@@ -1,7 +1,18 @@
 %% @copyright 2017 Takeru Ohta <phjgt308@gmail.com>
 %%
-%% @doc TODO
+%% @doc Span Sampler.
 %%
+%% Note that this component has not been described in the
+%% <a href="https://github.com/opentracing/specification/blob/1.1/specification.md">OpenTracing Specification</a>.
+%%
+%% === Callbacks ===
+%%
+%% This module requires following callback:
+%%
+%% ```
+%% %% @doc Determines to sample the next span which has the given name and tags.
+%% -callback is_sampled(state(), passage:operation_name(), passage:tags()) -> boolean().
+%% '''
 -module(passage_sampler).
 
 %%------------------------------------------------------------------------------
@@ -23,8 +34,7 @@
 %%------------------------------------------------------------------------------
 %% Callback API
 %%------------------------------------------------------------------------------
--callback is_sampled(state(), passage:operation_name(), passage:tags()) ->
-    boolean().
+-callback is_sampled(state(), passage:operation_name(), passage:tags()) -> boolean().
 
 %%------------------------------------------------------------------------------
 %% Macros and Records
@@ -41,24 +51,32 @@
 %% Exported Types
 %%------------------------------------------------------------------------------
 -opaque sampler() :: #?SAMPLER{}.
+%% Sampler.
 
 -type state() :: term().
+%% Implementation-dependent state.
 
 %%------------------------------------------------------------------------------
 %% Exported Functions
 %%------------------------------------------------------------------------------
+%% @doc Makes a new sampler.
+%%
+%% Note that `Module' must be a implementation module of `passage_sampler' behaviour.
 -spec new(module(), state()) -> sampler().
 new(Module, State) ->
     #?SAMPLER{module = Module, state = State}.
 
+%% @doc Returns `true' if `X' is a sampler, otherwise `false'.
 -spec is_sampler(sampler() | term()) -> boolean().
 is_sampler(X) ->
     is_record(X, ?SAMPLER).
 
+%% @doc Returns the module of `Sampler'.
 -spec get_module(sampler()) -> module().
 get_module(Sampler) ->
     Sampler#?SAMPLER.module.
 
+%% @doc Returns the state of `Sampler'.
 -spec get_state(sampler()) -> state().
 get_state(Sampler) ->
     Sampler#?SAMPLER.state.
@@ -66,6 +84,7 @@ get_state(Sampler) ->
 %%------------------------------------------------------------------------------
 %% Application Internal Functions
 %%------------------------------------------------------------------------------
+%% @private
 -spec is_sampled(sampler(), passage:operation_name(), passage:tags()) -> boolean().
 is_sampled(#?SAMPLER{module = Module, state = State}, Name, Tags) ->
     Module:is_sampled(State, Name, Tags).

@@ -1,7 +1,19 @@
 %% @copyright 2017 Takeru Ohta <phjgt308@gmail.com>
 %%
-%% @doc TODO
+%% @doc A null implementation of the {@link passage_span_context} behaviour.
 %%
+%% Note that this implementation is provided only for testing purposes.
+%%
+%% === Examples ===
+%%
+%% ```
+%% Context = passage_span_context_null,
+%% Sampler = passage_sampler_null:new(),
+%% Reporter = passage_reporter_null:new(),
+%%
+%% ok = passage_tracer_registry:register(foo, Context, Sampler, Reporter),
+%% [foo] = passage_tracer_registry:which_tracers(),
+%% '''
 -module(passage_span_context_null).
 
 -behaviour(passage_span_context).

@@ -1,7 +1,47 @@
 %% @copyright 2017 Takeru Ohta <phjgt308@gmail.com>
 %%
-%% @doc TODO
+%% @doc Span.
 %%
+%% <blockquote>
+%% <b>Traces</b> in OpenTracing are defined implicitly by their <b>Spans</b>.
+%% In particular, a <b>Trace</b> can be thought of as a directed acyclic graph (DAG) of <b>Spans</b>,
+%% where the edges between <b>Spans</b> are called <b>References</b>.
+%%
+%% Each <b>Span</b> encapsulates the following state:
+%% <ul>
+%%   <li>An operation name</li>
+%%   <li>A start timestamp</li>
+%%   <li>A finish timestamp</li>
+%%   <li>A set of zero or more key:value <b>Span Tags</b>. The keys must be strings. The values may be strings, bools, or numeric types.</li>
+%%   <li>A set of zero or more <b>Span Logs</b>, each of which is itself a key:value map paired with a timestamp. The keys must be strings, though the values may be of any type. Not all OpenTracing implementations must support every value type.</li>
+%%   <li>A <b>SpanContext</b></li>
+%%   <li><b>References</b> to zero or more causally-related <b>Spans</b> (via the <b>SpanContext</b> of those related <b>Spans</b>)</li>
+%% </ul>
+%%
+%% <a href="https://github.com/opentracing/specification/blob/1.1/specification.md#the-opentracing-data-model">
+%% The OpenTracing Data Model
+%% </a>
+%% </blockquote>
+%%
+%% === Examples ===
+%%
+%% ```
+%% %% Registers a tracer
+%% Context = passage_span_context_null,
+%% Sampler = passage_sampler_all:new(),
+%% Reporter = passage_reporter_null:new(),
+%% ok = passage_tracer_registry:register(tracer, Context, Sampler, Reporter),
+%%
+%% %% Starts a span
+%% MaybeSpan = passage:start_root_span(example, tracer),
+%% case MaybeSpan of
+%%     undefined -> ok;
+%%     Span      -> example = passage_span:get_operation_name(Span)
+%% end,
+%%
+%% %% Finishes a span
+%% passage:finish_span(MaybeSpan).
+%% '''
 -module(passage_span).
 
 -include("opentracing.hrl").
@@ -13,6 +53,8 @@
 -export([get_tags/1]).
 -export([get_refs/1]).
 -export([get_logs/1]).
+-export([get_start_time/1]).
+-export([get_finish_time/1]).
 -export([get_context/1]).
 
 -export_type([span/0]).
@@ -39,46 +81,74 @@
 
 -record(?SPAN,
         {
-          tracer :: passage:tracer_id(),
-          operation_name :: passage:operation_name(),
-          start_time :: erlang:timestamp(),
+          tracer                  :: passage:tracer_id(),
+          operation_name          :: passage:operation_name(),
+          start_time              :: erlang:timestamp(),
           finish_time = undefined :: erlang:timestamp() | undefined,
-          refs = [] :: normalized_refs(),
-          tags = #{} :: passage:tags(),
-          logs = [] :: [log()],
-          context :: passage_span_context:context()
+          refs        = []        :: normalized_refs(),
+          tags        = #{}       :: passage:tags(),
+          logs        = []        :: [log()],
+          context                 :: passage_span_context:context()
         }).
 
 %%------------------------------------------------------------------------------
 %% Exported Types
 %%------------------------------------------------------------------------------
 -opaque span() :: #?SPAN{}.
+%% Span.
 
 -type normalized_refs() :: [normalized_ref()].
+%% Normalized span references.
+%%
+%% Unlike `passage:refs/0', this cannot contain unsampled (i.e., `undefined') spans.
 
 -type normalized_ref() :: {passage:ref_type(), span()}.
+%% Normalized span reference.
+%%
+%% Note that the values of tags, references and logs are set to empty
+%% when the span is created.
 
 -type log() :: {passage:log_fields(), erlang:timestamp()}.
+%% Timestamped span log fields.
 
 %%------------------------------------------------------------------------------
 %% Exported Functions
 %%------------------------------------------------------------------------------
+%% @doc Returns the operation name of `Span'.
 -spec get_operation_name(span()) -> passage:operation_name().
 get_operation_name(Span) ->
     Span#?SPAN.operation_name.
 
+%% @doc Returns the tags of `Span'.
 -spec get_tags(span()) -> passage:tags().
 get_tags(Span) ->
     Span#?SPAN.tags.
 
+%% @doc Returns the references of `Span'.
 -spec get_refs(span()) -> normalized_refs().
 get_refs(Span) ->
     Span#?SPAN.refs.
 
+%% @doc Returns the logs of `Span'.
 -spec get_logs(span()) -> [log()].
 get_logs(Span) ->
     Span#?SPAN.logs.
 
+%% @doc Returns the start time of `Span'.
+-spec get_start_time(span()) -> erlang:timestamp().
+get_start_time(Span) ->
+    Span#?SPAN.start_time.
+
+%% @doc Returns the finish time of `Span'.
+%%
+%% If the span has not been finished, it will return `error'.
+-spec get_finish_time(Span :: span()) -> {ok, erlang:timestamp()} | error.
+get_finish_time(#?SPAN{finish_time = undefined}) ->
+    error;
+get_finish_time(Span) ->
+    {ok, Span#?SPAN.finish_time}.
+
+%% @doc Returns the context of `Span'.
 -spec get_context(span()) -> passage_span_context:context().
 get_context(Span) ->
     Span#?SPAN.context.
@@ -205,7 +275,7 @@ is_sampled(Tracer, OperationName, Tags) ->
 -spec get_time([{time, erlang:timestamp()}]) -> erlang:timestamp().
 get_time(Options) ->
     case lists:keyfind(time, 1, Options) of
-        false     -> os:timestamp();
+        false     -> erlang:timestamp();
         {_, Time} -> Time
     end.
 

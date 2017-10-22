@@ -1,7 +1,18 @@
 %% @copyright 2017 Takeru Ohta <phjgt308@gmail.com>
 %%
-%% @doc TODO
+%% @doc All Sampler.
 %%
+%% This sampler samples all the spans.
+%%
+%% === Examples ===
+%%
+%% ```
+%% Context = passage_span_context_null,
+%% Sampler = passage_sampler_all:new(),
+%% Reporter = passage_reporter_null:new(),
+%%
+%% ok = passage_tracer_registry:register(foo, Context, Sampler, Reporter).
+%% '''
 -module(passage_sampler_all).
 
 -behaviour(passage_sampler).
@@ -19,6 +30,7 @@
 %%------------------------------------------------------------------------------
 %% Exported Functions
 %%------------------------------------------------------------------------------
+%% @doc Makes a new sampler.
 -spec new() -> passage_sampler:sampler().
 new() ->
     passage_sampler:new(?MODULE, undefined).
@@ -26,5 +38,6 @@ new() ->
 %%------------------------------------------------------------------------------
 %% 'passage_sampler' Callback Functions
 %%------------------------------------------------------------------------------
+%% @private
 is_sampled(_State, _OperationName, _Tags) ->
     true.

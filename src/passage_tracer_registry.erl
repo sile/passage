@@ -1,7 +1,22 @@
 %% @copyright 2017 Takeru Ohta <phjgt308@gmail.com>
 %%
-%% @doc TODO
+%% @doc Tracer Registry.
 %%
+%% === Examples ===
+%%
+%% ```
+%% Context = passage_span_context_null,
+%% Sampler = passage_sampler_null:new(),
+%% Reporter = passage_reporter_null:new(),
+%%
+%% %% Registers
+%% ok = passage_tracer_registry:register(foo, Context, Sampler, Reporter),
+%% [foo] = passage_tracer_registry:which_tracers(),
+%%
+%% %% Deregisters
+%% ok = passage_tracer_registry:deregister(foo),
+%% [] = passage_tracer_registry:which_tracers()
+%% '''
 -module(passage_tracer_registry).
 
 -behavior(gen_server).
@@ -43,6 +58,7 @@
 %%------------------------------------------------------------------------------
 %% Application Internal Functions
 %%------------------------------------------------------------------------------
+%% @private
 -spec start_link() -> {ok, pid()} | {error, Reason :: term()}.
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
@@ -50,6 +66,7 @@ start_link() ->
 %%------------------------------------------------------------------------------
 %% Exported Functions
 %%------------------------------------------------------------------------------
+%% @doc Registers the tracer.
 -spec register(Tracer, Module, Sampler, Reporter) -> ok | {error, Reason} when
       Tracer :: passage:tracer_id(),
       Module :: passage_span_context:implementation_module(),
@@ -65,14 +82,21 @@ register(Tracer, Module, Sampler, Reporter) ->
 
     gen_server:call(?MODULE, {register, {Tracer, Module, Sampler, Reporter}}).
 
+%% @doc Deregisters the tracer.
+%%
+%% If `Tracer' has not been registered, it will be simply ignored.
 -spec deregister(passage:tracer_id()) -> ok.
 deregister(Tracer) ->
     gen_server:cast(?MODULE, {deregister, Tracer}).
 
+%% @doc Returns the list of the registered tracers.
 -spec which_tracers() -> [passage:tracer_id()].
 which_tracers() ->
     gen_server:call(?MODULE, which_tracers).
 
+%% @doc Returns the `passage_span_context' implementation module associated with `Tracer'.
+%%
+%% If `Tracer' has not been registered, it will return `error'.
 -spec get_span_context_module(passage:tracer_id()) -> {ok, Module} | error when
       Module :: passage_span_context:implementation_module().
 get_span_context_module(Tracer) ->
@@ -81,6 +105,9 @@ get_span_context_module(Tracer) ->
         _             -> error
     end.
 
+%% @doc Returns the sampler associated with `Tracer'.
+%%
+%% If `Tracer' has not been registered, it will return `error'.
 -spec get_sampler(passage:tracer_id()) -> {ok, passage_sampler:sampler()} | error.
 get_sampler(Tracer) ->
     case ets:lookup(?TABLE, {sampler, Tracer}) of
@@ -88,10 +115,16 @@ get_sampler(Tracer) ->
         _              -> error
     end.
 
+%% @doc Updates the sampler associated with `Tracer' to `Sampler'.
+%%
+%% If `Tracer' has not been registered, it will be simply ignored.
 -spec set_sampler(passage:tracer_id(), passage_sampler:sampler()) -> ok.
 set_sampler(Tracer, Sampler) ->
     gen_server:cast(?MODULE, {set_sampler, {Tracer, Sampler}}).
 
+%% @doc Returns the reporter associated with `Tracer'.
+%%
+%% If `Tracer' has not been registered, it will return `error'.
 -spec get_reporter(passage:tracer_id()) -> {ok, passage_reporter:reporter()} | error.
 get_reporter(TracerId) ->
     case ets:lookup(?TABLE, {reporter, TracerId}) of
@@ -99,6 +132,9 @@ get_reporter(TracerId) ->
         _               -> error
     end.
 
+%% @doc Updates the reporter associated with `Tracer' to `Reporter'.
+%%
+%% If `Tracer' has not been registered, it will be simply ignored.
 -spec set_reporter(passage:tracer_id(), passage_reporter:reporter()) -> ok.
 set_reporter(Tracer, Reporter) ->
     gen_server:cast(?MODULE, {set_reporter, {Tracer, Reporter}}).
@@ -106,11 +142,13 @@ set_reporter(Tracer, Reporter) ->
 %%------------------------------------------------------------------------------
 %% 'gen_server' Callback Functions
 %%------------------------------------------------------------------------------
+%% @private
 init([]) ->
     _ = ets:new(?MODULE, [named_table, protected, {read_concurrency, true}]),
     State = #?STATE{},
     {ok, State}.
 
+%% @private
 handle_call({register, Args}, _From, State) ->
     handle_register(Args, State);
 handle_call(which_tracers, _From, State) ->
@@ -118,6 +156,7 @@ handle_call(which_tracers, _From, State) ->
 handle_call(_Request, _From, State) ->
     {noreply, State}.
 
+%% @private
 handle_cast({deregister, Args}, State) ->
     handle_deregister(Args, State);
 handle_cast({set_sampler, Args}, State)  ->
@@ -127,12 +166,15 @@ handle_cast({set_reporter, Args}, State) ->
 handle_cast(_Request, State) ->
     {noreply, State}.
 
+%% @private
 handle_info(_Info, State) ->
     {noreply, State}.
 
+%% @private
 terminate(_Reason, _State) ->
     ok.
 
+%% @private
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
