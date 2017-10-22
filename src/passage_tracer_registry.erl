@@ -57,6 +57,10 @@ start_link() ->
       Reporter :: passage_reporter:reporter(),
       Reason :: already_registered | term().
 register(Tracer, Module, Sampler, Reporter) ->
+    Args = [Tracer, Module, Sampler, Reporter],
+    is_atom(Tracer) orelse error(badarg, Args),
+    passage_reporter:is_reporter(Reporter) orelse error(badarg, Args),
+
     gen_server:call(?MODULE, {register, {Tracer, Module, Sampler, Reporter}}).
 
 -spec deregister(passage:tracer_id()) -> ok.
