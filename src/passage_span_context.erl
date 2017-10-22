@@ -26,11 +26,11 @@
 %%------------------------------------------------------------------------------
 %% Callback API
 %%------------------------------------------------------------------------------
--callback make_span_context(passage_span:normalized_refs()) -> context().
+-callback make_span_context_state(passage_span:normalized_refs()) -> state().
 
--callback inject_span_context(context(), format(), carrier(), inject_fun()) -> carrier().
+-callback inject_span_context(context(), format(), inject_fun(), carrier()) -> carrier().
 
--callback extract_span_context(format(), carrier(), iterate_fun()) -> {ok, context()} | error.
+-callback extract_span_context(format(), iterate_fun(), carrier()) -> {ok, context()} | error.
 
 %%------------------------------------------------------------------------------
 %% Macros & Records
