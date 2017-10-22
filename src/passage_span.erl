@@ -13,7 +13,7 @@
 -export([get_tags/1]).
 -export([get_refs/1]).
 -export([get_logs/1]).
--export([get_baggage_items/1]).
+-export([get_context/1]).
 
 -export_type([span/0]).
 -export_type([normalized_refs/0, normalized_ref/0]).
@@ -29,8 +29,8 @@
 -export([set_tags/2]).
 -export([log/3]).
 -export([set_baggage_items/2]).
+-export([get_baggage_items/1]).
 -export([get_tracer/1]).
--export([get_context/1]).
 
 %%------------------------------------------------------------------------------
 %% Macros & Records
@@ -79,9 +79,9 @@ get_refs(Span) ->
 get_logs(Span) ->
     Span#?SPAN.logs.
 
--spec get_baggage_items(span()) -> passage:baggage_items().
-get_baggage_items(Span) ->
-    passage_span_context:get_baggage_items(Span#?SPAN.context).
+-spec get_context(span()) -> passage_span_context:context().
+get_context(Span) ->
+    Span#?SPAN.context.
 
 %%------------------------------------------------------------------------------
 %% Application Internal Functions
@@ -171,9 +171,9 @@ set_baggage_items(Span, Items) ->
     Span#?SPAN{context = passage_span_context:set_baggage_items(Context, Items)}.
 
 %% @private
--spec get_context(span()) -> passage_span_context:context().
-get_context(Span) ->
-    Span#?SPAN.context.
+-spec get_baggage_items(span()) -> passage:baggage_items().
+get_baggage_items(Span) ->
+    passage_span_context:get_baggage_items(Span#?SPAN.context).
 
 %% @private
 -spec get_tracer(span()) -> passage:tracer_id().

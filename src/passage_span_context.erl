@@ -1,53 +1,87 @@
+%% @copyright 2017 Takeru Ohta <phjgt308@gmail.com>
+%%
+%% @doc TODO
+%%
 -module(passage_span_context).
 
--export([make/2]).
+%%------------------------------------------------------------------------------
+%% Exported API
+%%------------------------------------------------------------------------------
 -export([get_baggage_items/1]).
+-export([get_state/1]).
+
+-export_type([context/0]).
+-export_type([state/0]).
+-export_type([format/0]).
+-export_type([carrier/0]).
+-export_type([inject_fun/0]).
+
+%%------------------------------------------------------------------------------
+%% Application Internal API
+%%------------------------------------------------------------------------------
+-export([make/2]).
 -export([set_baggage_items/2]).
 
--export_type([context/0, maybe_context/0]).
+%%------------------------------------------------------------------------------
+%% Callback API
+%%------------------------------------------------------------------------------
+-callback make_span_context(passage_span:normalized_refs()) -> context().
 
+-callback inject_span_context(context(), format(), carrier(), inject_fun()) -> carrier().
+
+-callback extract_span_context(format(), carrier(), iterate_fun()) -> {ok, context()} | error.
+
+%%------------------------------------------------------------------------------
+%% Macros & Records
+%%------------------------------------------------------------------------------
 -define(CONTEXT, ?MODULE).
 
 -record(?CONTEXT,
         {
-          state :: term(),
+          state               :: state(),
           baggage_items = #{} :: passage:baggage_items()
         }).
 
+%%------------------------------------------------------------------------------
+%% Exported Types
+%%------------------------------------------------------------------------------
 -opaque context() :: #?CONTEXT{}.
 
--type maybe_context() :: context() | undefined.
+-type state() :: term().
 
 -type format() :: text_map | http_header | binary.
 
 -type carrier() :: term().
 
--type key() :: binary().
--type value() :: binary().
--type inject_fun() :: fun ((key(), value(), carrier()) -> carrier()).
--type extract_fun() :: fun ((carrier()) -> {ok, key(), value(), carrier()} | error).
+-type inject_fun() :: fun ((Key :: binary(), Value :: binary(), carrier()) -> carrier()).
 
--callback make_span_context(passage_span:span(), passage:baggage_items()) ->
-    passage_span_context:context().
+-type iterate_fun() ::
+        fun ((carrier()) -> {ok, Key :: binary(), Value :: binary(), carrier()} | error).
 
--callback inject_span_context(passage_span_context:context(), format(),
-                              carrier(), inject_fun()) -> carrier().
+%%------------------------------------------------------------------------------
+%% Exported Functions
+%%------------------------------------------------------------------------------
+-spec get_baggage_items(context()) -> passage:baggage_items().
+get_baggage_items(Context) ->
+    Context#?CONTEXT.baggage_items.
 
--callback extract_span_context(format(), carrier(), extract_fun()) ->
-    {ok, passage_span_context:context()} | error.
+-spec get_state(context()) -> state().
+get_state(Context) ->
+    Context#?CONTEXT.state.
 
+%%------------------------------------------------------------------------------
+%% Application Internal Functions
+%%------------------------------------------------------------------------------
+%% @private
 -spec make(passage:tracer_id(), passage_span:normalized_refs()) -> context().
 make(Tracer, Refs) ->
-    State = passage_tracer:make_span_context_state(Tracer, Refs),
+    Module = passage_registry:get_tracer_module(Tracer),
+    State = Module:make_span_context_state(Refs),
     BaggageItems = lists:foldr(fun maps:merge/2, #{}, Refs),
-    #?CONTEXT{ state = State, baggage_items = BaggageItems }.
+    #?CONTEXT{state = State, baggage_items = BaggageItems}.
 
--spec get_baggage_items(maybe_context()) -> passage:baggage_items().
-get_baggage_items(undefined) -> #{};
-get_baggage_items(Context)   -> Context#?CONTEXT.baggage_items.
-
--spec set_baggage_items(maybe_context(), passage:baggage_items()) -> maybe_context().
-set_baggage_items(undefined, _BaggageItems) -> undefined;
-set_baggage_items(Context,    BaggageItems) ->
+%% @private
+-spec set_baggage_items(context(), passage:baggage_items()) -> context().
+set_baggage_items(Context, BaggageItems) ->
     Merged = maps:merge(Context#?CONTEXT.baggage_items, BaggageItems),
     Context#?CONTEXT{baggage_items = Merged}.

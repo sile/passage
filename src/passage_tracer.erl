@@ -2,18 +2,11 @@
 
 -export([start/2, start/3]).
 -export([get_sampler/1]).
--export([make_span_context_state/2]).
 
 -export_type([start_option/0]).
 
 -type start_option() :: {sampler, passage_sampler:sampler()}
                       | {reporters, [passage_reporter:reporter()]}.
-
--spec make_span_context_state(passage:tracer_id(), passage_span:normalized_refs()) ->
-                                     passage_span_context:state().
-make_span_context_state(Tracer, Refs) ->
-    Module = passage_registry:get_tracer_module(Tracer),
-    Module:make_span_context_state(Refs).
 
 -spec get_sampler(passage:tracer_id()) -> passage_sampler:sampler().
 get_sampler(Tracer) ->
