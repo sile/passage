@@ -1,5 +1,5 @@
 {application, passage,
- [{description, "An OTP application"},
+ [{description, "OpenTracing API for Erlang"},
   {vsn, "0.1.0"},
   {registered, []},
   {mod, { passage_app, []}},
@@ -10,7 +10,7 @@
   {env,[]},
   {modules, []},
 
-  {maintainers, []},
+  {maintainers,["Takeru Ohta"]},
   {licenses, ["MIT"]},
-  {links, []}
+  {links, [{"GitHub","https://github.com/sile/thrift_protocol"}]}
  ]}.
