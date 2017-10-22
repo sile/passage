@@ -9,7 +9,7 @@
 %%------------------------------------------------------------------------------
 %% Exported API
 %%------------------------------------------------------------------------------
--export([new/1]).
+-export([new/2]).
 
 %%------------------------------------------------------------------------------
 %% 'passage_reporter' Callback API
@@ -19,12 +19,12 @@
 %%------------------------------------------------------------------------------
 %% Exported Functions
 %%------------------------------------------------------------------------------
--spec new(pid()) -> passage_reporter:reporter().
-new(DestinationPid) ->
-    passage_reporter:new(?MODULE, DestinationPid).
+-spec new(pid(), term()) -> passage_reporter:reporter().
+new(DestinationPid, Tag) ->
+    passage_reporter:new(?MODULE, {DestinationPid, Tag}).
 
 %%------------------------------------------------------------------------------
 %% 'passage_reporter' Callback Functions
 %%------------------------------------------------------------------------------
-report(DestinationPid, Span) ->
-    DestinationPid ! Span.
+report({DestinationPid, Tag}, Span) ->
+    DestinationPid ! {Tag, Span}.

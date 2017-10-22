@@ -120,7 +120,7 @@ init([]) ->
 handle_call({register, Args}, _From, State) ->
     handle_register(Args, State);
 handle_call(which_tracers, _From, State) ->
-    {ok, State#?STATE.tracers, State};
+    {reply, State#?STATE.tracers, State};
 handle_call(_Request, _From, State) ->
     {noreply, State}.
 

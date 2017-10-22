@@ -75,13 +75,13 @@
 %%------------------------------------------------------------------------------
 %% Exported Functions
 %%------------------------------------------------------------------------------
--spec start_root_span(tracer_id(), operation_name()) -> maybe_span().
-start_root_span(Tracer, OperationName) ->
-    start_root_span(Tracer, OperationName, []).
+-spec start_root_span(operation_name(), tracer_id()) -> maybe_span().
+start_root_span(OperationName, Tracer) ->
+    start_root_span(OperationName, Tracer, []).
 
--spec start_root_span(tracer_id(), operation_name(), start_root_span_options()) ->
+-spec start_root_span(operation_name(), tracer_id(), start_root_span_options()) ->
                              maybe_span().
-start_root_span(Tracer, OperationName, Options) ->
+start_root_span(OperationName, Tracer, Options) ->
     passage_span:start_root(Tracer, OperationName, Options).
 
 -spec start_span(operation_name(), ref()) -> maybe_span().

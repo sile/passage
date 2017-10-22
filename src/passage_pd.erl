@@ -27,13 +27,13 @@
 %%------------------------------------------------------------------------------
 %% Exported Functions
 %%------------------------------------------------------------------------------
--spec start_root_span(passage:tracer_id(), passage:operation_name()) -> ok.
-start_root_span(Tracer, OperationName) ->
-    start_root_span(Tracer, OperationName, []).
+-spec start_root_span(passage:operation_name(), passage:tracer_id()) -> ok.
+start_root_span(OperationName, Tracer) ->
+    start_root_span(OperationName, Tracer, []).
 
--spec start_root_span(passage:tracer_id(), passage:operation_name(), passge:start_root_span_options()) -> ok.
-start_root_span(Tracer, OperationName, Options) ->
-    case passage:start_root_span(Tracer, OperationName, Options) of
+-spec start_root_span(passage:operation_name(), passage:tracer_id(), passge:start_root_span_options()) -> ok.
+start_root_span(OperationName, Tracer, Options) ->
+    case passage:start_root_span(OperationName, Tracer, Options) of
         undefined -> ok;
         Span      -> put_ancestors([Span | get_ancestors()])
     end.
