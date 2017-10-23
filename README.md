@@ -1,5 +1,5 @@
 passage
-================
+=======
 
 [![hex.pm version](https://img.shields.io/hexpm/v/passage.svg)](https://hex.pm/packages/passage)
 [![Build Status](https://travis-ci.org/sile/passage.svg?branch=master)](https://travis-ci.org/sile/passage)
