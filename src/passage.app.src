@@ -1,16 +1,11 @@
-{application, passage,
- [{description, "OpenTracing API for Erlang"},
-  {vsn, "0.1.0"},
-  {registered, []},
-  {mod, { passage_app, []}},
-  {applications,
-   [kernel,
-    stdlib
-   ]},
-  {env,[]},
-  {modules, []},
-
-  {maintainers,["Takeru Ohta"]},
-  {licenses, ["MIT"]},
-  {links, [{"GitHub","https://github.com/sile/passage"}]}
- ]}.
+{application,passage,
+             [{description,"OpenTracing API for Erlang"},
+              {vsn,"0.1.1"},
+              {registered,[]},
+              {mod,{passage_app,[]}},
+              {applications,[kernel,stdlib]},
+              {env,[]},
+              {modules,[]},
+              {maintainers,["Takeru Ohta"]},
+              {licenses,["MIT"]},
+              {links,[{"GitHub","https://github.com/sile/passage"}]}]}.
