@@ -1,6 +1,6 @@
 {application,passage,
              [{description,"OpenTracing API for Erlang"},
-              {vsn,"0.1.1"},
+              {vsn,"0.1.2"},
               {registered,[]},
               {mod,{passage_app,[]}},
               {applications,[kernel,stdlib]},
