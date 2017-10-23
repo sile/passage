@@ -35,7 +35,7 @@ receive {span, FinishedChildSpan} -> ok end,
 receive {span, FinishedRootSpan} -> ok end.
 ```
 
-Process Dictionary Version:
+### Process Dictionary Version
 
 ```erlang
 %% Registers `tracer`
@@ -57,6 +57,31 @@ passage_pd:finish_span(),  % root
 %% Receives the finished spans
 receive {span, FinishedChildSpan} -> ok end,
 receive {span, FinishedRootSpan} -> ok end.
+```
+
+### Parse Transform
+
+```erlang
+-module(example).
+
+-compile({parse_transform, passage_transform}). % Enables `passage_transform'
+
+-passage_trace([{tags, #{foo => bar}}, {eval_tags, #{size => "byte_size(Bin)"}}]).
+-spec foo(binary()) -> binary().
+foo(Bin) ->
+  <<"foo", Bin/binary>>.
+```
+
+The above foo function will be transformed as follows:
+```erlang
+foo(Bin) ->
+  try
+    passage_pd:start_span(foo, [{tags, #{application => example, module => example}}]),
+    passage_pd:set_tags(#{process => self(), size => byte_size(Bin)}),
+    <<"foo", Bin/binary>>
+  after
+    passage_pd:finish_span()
+  end.
 ```
 
 References
