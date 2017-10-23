@@ -284,7 +284,7 @@ get_time(Options) ->
 make_span_context(Tracer, Refs) ->
     case passage_tracer_registry:get_span_context_module(Tracer) of
         error        -> error;
-        {ok, Module} -> {ok, passage_span_context:make(Module, Refs)}
+        {ok, Module} -> {ok, passage_span_context:from_refs(Module, Refs)}
     end.
 
 -spec normalize_refs([passage:maybe_span()]) -> normalized_refs().

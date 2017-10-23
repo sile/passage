@@ -10,7 +10,7 @@ span_context_test_() ->
     [
      {"basic test",
       fun () ->
-              Context0 = passage_span_context:make(passage_span_context_null, []),
+              Context0 = passage_span_context:from_refs(passage_span_context_null, []),
               ?assertEqual(undefined, passage_span_context:get_state(Context0)),
               ?assertEqual(#{}, passage_span_context:get_baggage_items(Context0)),
 

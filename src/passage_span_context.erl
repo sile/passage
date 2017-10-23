@@ -38,6 +38,7 @@
 %%------------------------------------------------------------------------------
 %% Exported API
 %%------------------------------------------------------------------------------
+-export([make/2]).
 -export([get_baggage_items/1]).
 -export([get_state/1]).
 
@@ -52,7 +53,7 @@
 %%------------------------------------------------------------------------------
 %% Application Internal API
 %%------------------------------------------------------------------------------
--export([make/2]).
+-export([from_refs/2]).
 -export([set_baggage_items/2]).
 
 %%------------------------------------------------------------------------------
@@ -127,6 +128,11 @@
 %%------------------------------------------------------------------------------
 %% Exported Functions
 %%------------------------------------------------------------------------------
+%% @doc Makes a new span context.
+-spec make(state(), passage:baggage_items()) -> context().
+make(State, BaggageItems) ->
+    #?CONTEXT{state = State, baggage_items = BaggageItems}.
+
 %% @doc Returns the baggage items of `Context'.
 -spec get_baggage_items(context()) -> passage:baggage_items().
 get_baggage_items(Context) ->
@@ -141,8 +147,8 @@ get_state(Context) ->
 %% Application Internal Functions
 %%------------------------------------------------------------------------------
 %% @private
--spec make(implementation_module(), passage_span:normalized_refs()) -> context().
-make(Module, Refs) ->
+-spec from_refs(implementation_module(), passage_span:normalized_refs()) -> context().
+from_refs(Module, Refs) ->
     State = Module:make_span_context_state(Refs),
     BaggageItems =
         lists:foldl(
