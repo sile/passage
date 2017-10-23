@@ -72,7 +72,7 @@ foo(Bin) ->
   <<"foo", Bin/binary>>.
 ```
 
-The above foo function will be transformed as follows:
+The above `foo` function will be transformed as follows:
 ```erlang
 foo(Bin) ->
   try
