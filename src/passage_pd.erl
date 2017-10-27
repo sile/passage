@@ -15,7 +15,7 @@
 %% ok = passage_tracer_registry:register(tracer, Context, Sampler, Reporter),
 %%
 %% %% Starts a root span
-%% ok = passage_pd:start_root_span(example_root, tracer),
+%% ok = passage_pd:start_span(example_root, [{tracer, tracer}]),
 %%
 %% %% Starts a child span
 %% ok = passage_pd:start_span(example_child),
@@ -33,10 +33,8 @@
 %%------------------------------------------------------------------------------
 %% Exported API
 %%------------------------------------------------------------------------------
--export([start_root_span/2, start_root_span/3]).
 -export([start_span/1, start_span/2]).
 -export([finish_span/0, finish_span/1]).
--export([with_root_span/3, with_root_span/4]).
 -export([with_span/2, with_span/3]).
 -export([current_span/0]).
 -export([set_operation_name/1]).
@@ -53,23 +51,6 @@
 %%------------------------------------------------------------------------------
 %% Exported Functions
 %%------------------------------------------------------------------------------
-%% @equiv start_root_span(OperationName, Tracer, [])
--spec start_root_span(passage:operation_name(), passage:tracer_id()) -> ok.
-start_root_span(OperationName, Tracer) ->
-    start_root_span(OperationName, Tracer, []).
-
-%% @doc Starts a root span.
-%%
-%% The started span will be pushed to the process dictionary of the calling process.
-%%
-%% If the sampler associated with `Tracer' does not sample the span,
-%% the value of span will be `undefined'.
--spec start_root_span(passage:operation_name(), passage:tracer_id(),
-                      passage:start_root_span_options()) -> ok.
-start_root_span(OperationName, Tracer, Options) ->
-    Span = passage:start_root_span(OperationName, Tracer, Options),
-    put_ancestors([Span | get_ancestors()]).
-
 %% @equiv start_span(OperationName, [])
 -spec start_span(passage:operation_name()) -> ok.
 start_span(OperationName) ->
@@ -86,11 +67,9 @@ start_span(OperationName, Options) ->
     Options1 =
         case Ancestors of
             []           -> Options;
-            [Parent | _] ->
-                Refs = proplists:get_value(refs, Options, []),
-                [{refs, [{child_of, Parent} | Refs]} | Options]
+            [Parent | _] -> [{child_of, Parent} | Options]
         end,
-    Span = passage_span:start(OperationName, Options1),
+    Span = passage:start_span(OperationName, Options1),
     put_ancestors([Span | Ancestors]).
 
 %% @equiv finish_span([])
@@ -107,26 +86,6 @@ finish_span(Options) ->
     case pop_span() of
         undefined -> ok;
         Span      -> passage:finish_span(Span, Options)
-    end.
-
-%% @equiv with_root_span(OperationName, Tracer, [], Fun)
--spec with_root_span(passage:operation_name(), passage:tracer_id(), Fun) -> Result when
-      Fun :: fun (() -> Result),
-      Result :: term().
-with_root_span(OperationName, Tracer, Fun) ->
-    with_root_span(OperationName, Tracer, [], Fun).
-
-%% @doc Starts a root span enclosing `Fun'.
--spec with_root_span(passage:operation_name(), passage:tracer_id(),
-                     passage:start_span_options(), Fun) -> Result when
-      Fun :: fun (() -> Result),
-      Result :: term().
-with_root_span(OperationName, Tracer, Options, Fun) ->
-    try
-        start_root_span(OperationName, Tracer, Options),
-        Fun()
-    after
-        finish_span()
     end.
 
 %% @equiv with_span(OperationName, [], Fun)

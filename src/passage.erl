@@ -15,10 +15,10 @@
 %% ok = passage_tracer_registry:register(tracer, Context, Sampler, Reporter),
 %%
 %% %% Starts a root span
-%% RootSpan = passage:start_root_span(example_root, tracer),
+%% RootSpan = passage:start_span(example_root, [{tracer, tracer}]),
 %%
 %% %% Starts a child span
-%% ChildSpan = passage:start_span(example_child, {child_of, RootSpan}),
+%% ChildSpan = passage:start_span(example_child, [{child_of, RootSpan}]),
 %%
 %% %% Finishes spans
 %% passage:finish_span(ChildSpan),
@@ -35,8 +35,7 @@
 %%------------------------------------------------------------------------------
 %% Exported API
 %%------------------------------------------------------------------------------
--export([start_root_span/2, start_root_span/3]).
--export([start_span/2, start_span/3]).
+-export([start_span/1, start_span/2]).
 -export([finish_span/1, finish_span/2]).
 -export([set_operation_name/2]).
 -export([set_tags/2]).
@@ -48,7 +47,6 @@
 -export_type([tracer_id/0]).
 -export_type([maybe_span/0]).
 -export_type([operation_name/0]).
--export_type([start_root_span_option/0, start_root_span_options/0]).
 -export_type([start_span_option/0, start_span_options/0]).
 -export_type([finish_span_option/0, finish_span_options/0]).
 -export_type([tags/0, tag_name/0, tag_value/0]).
@@ -74,8 +72,11 @@
 -type refs() :: [ref()].
 %% Span references.
 
--type ref() :: {ref_type(), maybe_span()}.
+-type ref() :: {ref_type(), passage_span:span()}.
 %% Span reference.
+%%
+%% Note that the values of tags, references and logs of a reference are set to empty
+%% when the associated span is created.
 %%
 %% See also: <a href="https://github.com/opentracing/specification/blob/1.1/specification.md#references-between-spans">References between Spans (The OpenTracing Semantic Specification)</a>
 
@@ -115,23 +116,18 @@
 -type log_field_value() :: term().
 %% Log field value.
 
--type start_root_span_options() :: [start_root_span_option()].
-%% Options for {@link start_root_span/3}.
-
--type start_root_span_option() :: {time, erlang:timestamp()}
-                                | {tags, tags()}.
-%% <ul>
-%%  <li><b>time</b>: Start timestamp of the span. The default value is `erlang:timestamp()'.</li>
-%%  <li><b>tags</b>: Tags associated to the span. The default value is `#{}'.</li>
-%% </ul>
-
 -type start_span_options() :: [start_span_option()].
-%% Options for {@link start_span/3}.
+%% Options for {@link start_span/2}.
 
--type start_span_option() :: {refs, refs()}
-                           | start_root_span_option().
+-type start_span_option() :: {tracer, tracer_id()}
+                           | {tags, tags()}
+                           | {ref_type(), maybe_span()}
+                           | {time, erlang:timestamp()}.
 %% <ul>
-%%   <li><b>refs</b>: Additional references related to the span. The default value is `[]'. </li>
+%%   <li><b>tracer</b>: The tracer used for tracing the span. If this option is omitted, the span will never be a root span. If the span has any valid references, this option will be ignored.</li>
+%%   <li><b>time</b>: Start timestamp of the span. The default value is `erlang:timestamp()'.</li>
+%%   <li><b>tags</b>: Tags associated to the span. The default value is `#{}'.</li>
+%%   <li><b>child_of|follows_from</b>: Specifies a references related to the span. This option can be presented more than once.</li>
 %% </ul>
 
 -type finish_span_options() :: [finish_span_option()].
@@ -159,37 +155,39 @@
 %%------------------------------------------------------------------------------
 %% Exported Functions
 %%------------------------------------------------------------------------------
-%% @equiv start_root_span(OperationName, Tracer, [])
--spec start_root_span(operation_name(), tracer_id()) -> maybe_span().
-start_root_span(OperationName, Tracer) ->
-    start_root_span(OperationName, Tracer, []).
-
-%% @doc Starts a root span.
-%%
-%% If the sampler associated with `Tracer' does not sample the span,
-%% this function will return `undefined'.
--spec start_root_span(operation_name(), tracer_id(), start_root_span_options()) ->
-                             maybe_span().
-start_root_span(OperationName, Tracer, Options) ->
-    passage_span:start_root(Tracer, OperationName, Options).
-
-%% @equiv start_span(OperationName, PrimaryReference, [])
--spec start_span(operation_name(), ref()) -> maybe_span().
-start_span(OperationName, PrimaryReference) ->
-    start_span(OperationName, PrimaryReference, []).
+%% @equiv start_span(OperationName, [])
+-spec start_span(operation_name()) -> maybe_span().
+start_span(OperationName) ->
+    start_span(OperationName, []).
 
 %% @doc Starts a span.
 %%
-%% If there is no sampled span references, this function will return `undefined'.
--spec start_span(operation_name(), ref(), start_span_options()) -> maybe_span().
-start_span(OperationName, PrimaryReference, Options) ->
-    {Refs1, Options2} =
-        case lists:keytake(refs, 1, Options) of
-            false                            -> {[], Options};
-            {value, {refs, Refs0}, Options1} -> {Refs0, Options1}
-        end,
-    Options3 = [{refs, [PrimaryReference | Refs1]} | Options2],
-    passage_span:start(OperationName, Options3).
+%% If any of the following conditions is matched,
+%% a valid span object (i.e., non `undefined') will be returned.
+%%
+%% <ul>
+%%   <li>1. There are any valid (i.e., non `undefined') span references.</li>
+%%   <li>2. The `sampling.priority' tag exists and the value is a positive integer.</li>
+%%   <li>3. A `tracer' is specified and its sampler has determined to sample next span.</li>
+%% </ul>
+%%
+%% If the first condition matches,
+%% the tracer associated with the first reference will be used for tracing the resulting span.
+-spec start_span(operation_name(), start_span_options()) -> maybe_span().
+start_span(OperationName, Options) ->
+    Result =
+        (fun Recur ([],                        Acc) -> Acc;
+             Recur ([{tracer, T}       | L], error) -> Recur(L, {ok, T});
+             Recur ([{_, undefined}    | L],   Acc) -> Recur(L, Acc);
+             Recur ([{child_of, _}     | _],     _) -> ignore;
+             Recur ([{follows_from, _} | _],     _) -> ignore;
+             Recur ([_                 | L],   Acc) -> Recur(L, Acc)
+         end)(Options, error),
+    case Result of
+        error        -> undefined;
+        ignore       -> passage_span:start(OperationName, Options);
+        {ok, Tracer} -> passage_span:start_root(Tracer, OperationName, Options)
+    end.
 
 %% @equiv finish_span(Span, [])
 -spec finish_span(maybe_span()) -> ok.

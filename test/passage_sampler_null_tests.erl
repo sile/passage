@@ -18,7 +18,7 @@ sampler_null_test_() ->
                Reporter = passage_reporter_null:new(),
                ok = passage_tracer_registry:register(test_tracer, Context, Sampler, Reporter),
 
-               RootSpan = passage:start_root_span(reporter_null_test, test_tracer),
+               RootSpan = passage:start_span(reporter_null_test, [{tracer, test_tracer}]),
                ?assertEqual(undefined, RootSpan)
        end}
      ]}.

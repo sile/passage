@@ -33,7 +33,7 @@
 %% ok = passage_tracer_registry:register(tracer, Context, Sampler, Reporter),
 %%
 %% %% Starts a span
-%% MaybeSpan = passage:start_root_span(example, tracer),
+%% MaybeSpan = passage:start_span(example, [{tracer, tracer}]),
 %% case MaybeSpan of
 %%     undefined -> ok;
 %%     Span      -> example = passage_span:get_operation_name(Span)
@@ -58,7 +58,6 @@
 -export([get_context/1]).
 
 -export_type([span/0]).
--export_type([normalized_refs/0, normalized_ref/0]).
 -export_type([log/0]).
 
 %%------------------------------------------------------------------------------
@@ -85,7 +84,7 @@
           operation_name          :: passage:operation_name(),
           start_time              :: erlang:timestamp(),
           finish_time = undefined :: erlang:timestamp() | undefined,
-          refs        = []        :: normalized_refs(),
+          refs        = []        :: passage:refs(),
           tags        = #{}       :: passage:tags(),
           logs        = []        :: [log()],
           context                 :: passage_span_context:context()
@@ -96,17 +95,6 @@
 %%------------------------------------------------------------------------------
 -opaque span() :: #?SPAN{}.
 %% Span.
-
--type normalized_refs() :: [normalized_ref()].
-%% Normalized span references.
-%%
-%% Unlike `passage:refs/0', this cannot contain unsampled (i.e., `undefined') spans.
-
--type normalized_ref() :: {passage:ref_type(), span()}.
-%% Normalized span reference.
-%%
-%% Note that the values of tags, references and logs are set to empty
-%% when the span is created.
 
 -type log() :: {passage:log_fields(), erlang:timestamp()}.
 %% Timestamped span log fields.
@@ -125,7 +113,7 @@ get_tags(Span) ->
     Span#?SPAN.tags.
 
 %% @doc Returns the references of `Span'.
--spec get_refs(span()) -> normalized_refs().
+-spec get_refs(span()) -> passage:refs().
 get_refs(Span) ->
     Span#?SPAN.refs.
 
@@ -169,7 +157,7 @@ make_extracted_span(Tracer, Context) ->
 %% @private
 -spec start_root(passage:tracer_id(), passage:operation_name(), Options) ->
                         passage:maybe_span() when
-      Options :: passage:start_root_span_options().
+      Options :: passage:start_span_options().
 start_root(Tracer, OperationName, Options) ->
     Tags = proplists:get_value(tags, Options, #{}),
     case is_sampled(Tracer, OperationName, Tags) of
@@ -192,7 +180,7 @@ start_root(Tracer, OperationName, Options) ->
 %% @private
 -spec start(passage:operation_name(), passage:start_span_options()) -> passage:maybe_span().
 start(OperationName, Options) ->
-    Refs = normalize_refs(proplists:get_value(refs, Options, [])),
+    Refs = collect_valid_refs(Options),
     case Refs of
         []                 -> undefined;
         [{_, Primary} | _] ->
@@ -279,7 +267,7 @@ get_time(Options) ->
         {_, Time} -> Time
     end.
 
--spec make_span_context(passage:tracer_id(), passage_span:normalized_refs()) ->
+-spec make_span_context(passage:tracer_id(), passage:refs()) ->
                                {ok, passage_span_context:context()} | error.
 make_span_context(Tracer, Refs) ->
     case passage_tracer_registry:get_span_context_module(Tracer) of
@@ -287,12 +275,11 @@ make_span_context(Tracer, Refs) ->
         {ok, Module} -> {ok, passage_span_context:from_refs(Module, Refs)}
     end.
 
--spec normalize_refs([passage:maybe_span()]) -> normalized_refs().
-normalize_refs(Refs) ->
-    lists:filtermap(
-      fun ({_, undefined}) -> false;
-          ({Type, Span0})  ->
-              Span1 = Span0#?SPAN{refs = [], tags = #{}, logs = []},
-              {true, {Type, Span1}}
-      end,
-      Refs).
+-spec collect_valid_refs(passage:start_span_options()) -> passage:refs().
+collect_valid_refs(Options) ->
+    lists:filter(fun ({_, undefined})    -> false;
+                     ({child_of, _})     -> true;
+                     ({follows_from, _}) -> true;
+                     (_)                 -> false
+                 end,
+                 Options).

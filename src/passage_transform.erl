@@ -49,19 +49,60 @@
 -export([parse_transform/2]).
 
 -export_type([passage_trace_option/0]).
+-export_type([expr_string/0]).
 
 %%------------------------------------------------------------------------------
 %% Exported Types
 %%------------------------------------------------------------------------------
 -type passage_trace_option() :: {tracer, passage:tracer_id()} |
                                 {tags, passage:tags()} |
-                                {eval_tags, #{passage:tag_name() => string()}} |
-                                {child_of, string()} |
-                                {follows_from, string()} |
-                                {error_if, string()} |
+                                {eval_tags, #{passage:tag_name() => expr_string()}} |
+                                {child_of, expr_string()} |
+                                {follows_from, expr_string()} |
+                                {error_if, expr_string()} |
                                 error_if_exception.
-%% TODO: doc
-%% TODO: warnings unknown options
+%% <ul>
+%% <li><b>tracer</b>: See {@link passage:start_span/2}</li>
+%% <li><b>tags</b>: See {@link passage:start_span/2}</li>
+%% <li><b>eval_tags</b>: This is the same as `tags' except the values are dynamically evaluated in the transforming phase.</li>
+%% <li><b>child_of</b>: See {@link passage:start_span/2}</li>
+%% <li><b>follows_from</b>: See {@link passage:start_span/2}</li>
+%% <li><b>error_if</b>
+%% ```
+%% %% {error_if, ErrorPattern}
+%% case Body of
+%%   ErrorPattern = Error ->
+%%     passage_pd:log(#{message, Result}, [error]),
+%%     Error;
+%%   Ok -> Ok
+%% end.
+%% '''
+%% </li>
+%% <li><b>error_if_exception</b>:
+%% ```
+%% try
+%%   Body
+%% catch
+%%   Class:Error ->
+%%     passage_pd:log(#{'error.kind' => class,
+%%                      'message' => Error,
+%%                      'stack' => erlang:get_stacktrace()},
+%%                    [error]),
+%%     erlang:raise(Class, Error, erlang:get_stacktrace())
+%% end.
+%% '''
+%% </li>
+%% </ul>
+
+-type expr_string() :: string().
+%% The textual representation of an expression.
+%%
+%% When used, it will be converted to an AST representation as follows:
+%%
+%% ```
+%% {ok, Tokens, _} = erl_scan:string(ExprString ++ "."),
+%% {ok, [Expr]} = erl_parse:parse_exprs(Tokens).
+%% '''
 
 %%------------------------------------------------------------------------------
 %% Types & Records

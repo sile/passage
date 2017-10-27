@@ -21,10 +21,10 @@ Reporter = passage_reporter_process:new(self(), span),
 ok = passage_tracer_registry:register(tracer, Context, Sampler, Reporter),
 
 %% Starts a root span
-RootSpan = passage:start_root_span(example_root, tracer),
+RootSpan = passage:start_span(example_root, [{tracer, tracer}]),
 
 %% Starts a child span
-ChildSpan = passage:start_span(example_child, {child_of, RootSpan}),
+ChildSpan = passage:start_span(example_child, [{child_of, RootSpan}]),
 
 %% Finishes spans
 passage:finish_span(ChildSpan),
@@ -45,7 +45,7 @@ Reporter = passage_reporter_process:new(self(), span),
 ok = passage_tracer_registry:register(tracer, Context, Sampler, Reporter),
 
 %% Starts a root span
-ok = passage_pd:start_root_span(example_root, tracer),
+ok = passage_pd:start_span(example_root, [{tracer, tracer}]),
 
 %% Starts a child span
 ok = passage_pd:start_span(example_child),

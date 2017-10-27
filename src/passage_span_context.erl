@@ -19,7 +19,7 @@
 %%
 %% ```
 %% %% @doc Creates the state of a span context from the given references.
-%% -callback make_span_context_state(passage_span:normalized_refs()) ->
+%% -callback make_span_context_state(passage:refs()) ->
 %%     state().
 %%
 %% %% @doc Injects the span context into the carrier by the specified format.
@@ -59,7 +59,7 @@
 %%------------------------------------------------------------------------------
 %% Callback API
 %%------------------------------------------------------------------------------
--callback make_span_context_state(passage_span:normalized_refs()) -> state().
+-callback make_span_context_state(passage:refs()) -> state().
 
 -callback inject_span_context(context(), format(), inject_fun(), carrier()) -> carrier().
 
@@ -147,7 +147,7 @@ get_state(Context) ->
 %% Application Internal Functions
 %%------------------------------------------------------------------------------
 %% @private
--spec from_refs(implementation_module(), passage_span:normalized_refs()) -> context().
+-spec from_refs(implementation_module(), passage:refs()) -> context().
 from_refs(Module, Refs) ->
     State = Module:make_span_context_state(Refs),
     BaggageItems =

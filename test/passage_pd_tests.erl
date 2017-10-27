@@ -14,7 +14,7 @@ passage_pd_test_() ->
       {"basic test",
        fun () ->
                ok = start_test_tracer(),
-               ok = passage_pd:start_root_span(basic_test, test_tracer),
+               ok = passage_pd:start_span(basic_test, [{tracer, test_tracer}]),
                ok = passage_pd:finish_span(),
 
                [FinishedSpan] = finished_spans(),
@@ -28,7 +28,7 @@ passage_pd_test_() ->
        fun () ->
                ok = start_test_tracer(),
 
-               ok = passage_pd:start_root_span(root, test_tracer),
+               ok = passage_pd:start_span(root, [{tracer, test_tracer}]),
                ok = passage_pd:start_span(child),
                ok = passage_pd:finish_span(),
                ok = passage_pd:finish_span(),
@@ -44,8 +44,8 @@ passage_pd_test_() ->
       {"with span",
        fun () ->
                ok = start_test_tracer(),
-               passage_pd:with_root_span(
-                 root, test_tracer,
+               passage_pd:with_span(
+                 root, [{tracer, test_tracer}],
                  fun () ->
                          passage_pd:with_span(child, fun () -> ok end)
                  end),
@@ -61,7 +61,7 @@ passage_pd_test_() ->
       {"operation name",
        fun () ->
                ok = start_test_tracer(),
-               ok = passage_pd:start_root_span(root, test_tracer),
+               ok = passage_pd:start_span(root, [{tracer, test_tracer}]),
                ok = passage_pd:set_operation_name(foo),
 
                passage_pd:finish_span(),
@@ -71,8 +71,8 @@ passage_pd_test_() ->
       {"tag",
        fun () ->
                ok = start_test_tracer(),
-               ok = passage_pd:start_root_span(
-                      root, test_tracer, [{tags, #{foo => bar, 111 => 222}}]),
+               ok = passage_pd:start_span(
+                      root, [{tracer, test_tracer}, {tags, #{foo => bar, 111 => 222}}]),
                ok = passage_pd:set_tags(#{baz => qux, 111 => 333}),
 
                ok = passage_pd:finish_span(),
@@ -83,7 +83,7 @@ passage_pd_test_() ->
       {"baggage item",
        fun () ->
                ok = start_test_tracer(),
-               ok = passage_pd:start_root_span(root, test_tracer),
+               ok = passage_pd:start_span(root, [{tracer, test_tracer}]),
                ok = passage_pd:set_baggage_items(#{<<"foo">> => <<"bar">>}),
 
                ok = passage_pd:start_span(child),
@@ -96,7 +96,7 @@ passage_pd_test_() ->
       {"log",
        fun () ->
                ok = start_test_tracer(),
-               ok = passage_pd:start_root_span(root, test_tracer),
+               ok = passage_pd:start_span(root, [{tracer, test_tracer}]),
                ok = passage_pd:log(#{hello => world}, [{time, {1, 2, 3}}]),
                ok = passage_pd:log(#{foo => bar}),
 
@@ -109,7 +109,7 @@ passage_pd_test_() ->
       {"error log",
        fun () ->
                ok = start_test_tracer(),
-               ok = passage_pd:start_root_span(root, test_tracer),
+               ok = passage_pd:start_span(root, [{tracer, test_tracer}]),
                ok = passage_pd:log(#{message => "Hello World", kind => greeting}, [error]),
 
                ok = passage_pd:finish_span(),
@@ -124,8 +124,9 @@ passage_pd_test_() ->
        fun () ->
                ok = start_test_tracer(),
 
-               ok = passage_pd:start_root_span(
-                      basic_test, test_tracer, [{tags, #{'sampling.priority' => 0}}]),
+               ok = passage_pd:start_span(
+                      basic_test,
+                      [{tracer, test_tracer}, {tags, #{'sampling.priority' => 0}}]),
                ok = passage_pd:finish_span(),
                ?assertEqual([], finished_spans())
        end},
@@ -137,8 +138,10 @@ passage_pd_test_() ->
                ok = passage_tracer_registry:register(
                       test_tracer, Context, Sampler, Reporter),
 
-               ok = passage_pd:start_root_span(
-                      basic_test, test_tracer, [{tags, #{'sampling.priority' => 1}}]),
+               ok = passage_pd:start_span(
+                      basic_test,
+                      [{tracer, test_tracer},
+                       {tags, #{'sampling.priority' => 1}}]),
                ok = passage_pd:finish_span(),
                ?assertMatch([_Span], finished_spans())
        end},
@@ -156,9 +159,9 @@ passage_pd_test_() ->
       {"additional references",
        fun () ->
                ok = start_test_tracer(),
-               RootSpan = passage:start_root_span(root, test_tracer),
+               RootSpan = passage:start_span(root, [{tracer, test_tracer}]),
 
-               ok = passage_pd:start_span(child, [{refs, [{follows_from, RootSpan}]}]),
+               ok = passage_pd:start_span(child, [{follows_from, RootSpan}]),
                ok = passage_pd:finish_span(),
                ?assertMatch([_Span], finished_spans())
        end}
