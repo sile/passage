@@ -105,8 +105,14 @@
 %% '''
 
 %%------------------------------------------------------------------------------
-%% Types & Records
+%% Macros & Types & Records
 %%------------------------------------------------------------------------------
+-define(MAP_FIELD(Line, K, V),
+        {map_field_assoc, Line, {atom, Line, K}, V}).
+
+-define(PAIR(Line, K, V),
+        {tuple, Line, [{atom, Line, K}, V]}).
+
 -type form() :: {attribute, line(), atom(), term()}
               | {function, line(), atom(), non_neg_integer(), [clause()]}
               | erl_parse:abstract_form().
@@ -130,9 +136,13 @@
           function    :: atom(),
 
           trace   = false :: boolean(), % if `true' the next function will be traced
-          tags      = #{} :: map(),
-          eval_tags = #{} :: map(),
-          error_if        :: string() | undefined,
+
+          tracer = error  :: {ok, passage:tracer_id()} | error,
+          child_of        :: expr_string() | undefined,
+          follows_from    :: expr_string() | undefined,
+          tags      = #{} :: passage:tags(),
+          eval_tags = #{} :: #{passage:tag_name() => expr_string()},
+          error_if        :: expr_string() | undefined,
           error_if_exception = false :: boolean()
         }).
 
@@ -164,9 +174,18 @@ walk_forms(Forms, State) ->
                            application => State0#state.application,
                            module => State0#state.module
                          }),
+                  Tracer =
+                      case lists:keyfind(tracer, 1, Options) of
+                          false   -> error;
+                          {_, Id} -> {ok, Id}
+                      end,
                   State1 =
                       State0#state{
                         trace = true,
+
+                        tracer = Tracer,
+                        child_of = proplists:get_value(child_of, Options),
+                        follows_from = proplists:get_value(follows_from, Options),
                         tags = Tags,
                         eval_tags = proplists:get_value(eval_tags, Options, #{}),
                         error_if = proplists:get_value(error_if, Options),
@@ -185,9 +204,6 @@ walk_forms(Forms, State) ->
           Forms),
     lists:reverse(ResultFroms).
 
--define(MAP_FIELD(Line, K, V),
-        {map_field_assoc, Line, {atom, Line, K}, V}).
-
 -spec walk_clauses([clause()], #state{}) -> [clause()].
 walk_clauses(Clauses, State) ->
     [case Clause of
@@ -195,13 +211,34 @@ walk_clauses(Clauses, State) ->
              Mfa = io_lib:format("~s:~s/~p",
                                  [State#state.module, State#state.function, length(Args)]),
              OperationName = {atom, Line, binary_to_atom(list_to_binary(Mfa), utf8)},
-             StartOptions =
+             StartOptions0 =
                  erl_parse:abstract(
-                   [{tags, maps:merge(State#state.tags, #{line => Line})}],
+                   [{tags, maps:merge(State#state.tags, #{line => Line})} |
+                    case State#state.tracer of
+                        error        -> [];
+                        {ok, Tracer} -> [{tracer, Tracer}]
+                    end],
                    [{line, Line}]),
+             StartOptions1 =
+                 case State#state.child_of of
+                     undefined -> StartOptions0;
+                     ChildOf   ->
+                         {cons, Line,
+                          ?PAIR(Line, child_of, parse_expr_string(Line, ChildOf, State)),
+                          StartOptions0}
+                 end,
+             StartOptions2 =
+                 case State#state.follows_from of
+                     undefined   -> StartOptions1;
+                     FollowsFrom ->
+                         {cons, Line,
+                          ?PAIR(Line, follows_from,
+                                parse_expr_string(Line, FollowsFrom, State)),
+                          StartOptions1}
+                 end,
              StartSpan =
                  make_call_remote(
-                   Line, passage_pd, 'start_span', [OperationName, StartOptions]),
+                   Line, passage_pd, 'start_span', [OperationName, StartOptions2]),
 
              EvalTags =
                  {map, Line,

@@ -277,9 +277,14 @@ make_span_context(Tracer, Refs) ->
 
 -spec collect_valid_refs(passage:start_span_options()) -> passage:refs().
 collect_valid_refs(Options) ->
-    lists:filter(fun ({_, undefined})    -> false;
-                     ({child_of, _})     -> true;
-                     ({follows_from, _}) -> true;
-                     (_)                 -> false
-                 end,
-                 Options).
+    lists:filtermap(
+      fun ({_, undefined})    -> false;
+          ({child_of, S})     -> {true, {child_of, strip(S)}};
+          ({follows_from, S}) -> {true, {follows_from, strip(S)}};
+          (_)                 -> false
+      end,
+      Options).
+
+-spec strip(span()) -> span().
+strip(Span) ->
+    Span#?SPAN{refs = [], tags = #{}, logs = []}.
