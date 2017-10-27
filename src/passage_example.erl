@@ -17,14 +17,16 @@
 -spec hello(atom()) -> ok.
 hello(Name) ->
     io:format("Hello ~s\n", [Name]),
-    hello_child(Name),
+    _ = hello_child(Name),
     ok.
 
 %%------------------------------------------------------------------------------
 %% Internal Functions
 %%------------------------------------------------------------------------------
--passage_trace([]).
--spec hello_child(atom()) -> ok.
+-passage_trace([{error_if, "{error, _}"}]).
+-spec hello_child(atom()) -> ok | {error, term()}.
 hello_child(Name) ->
-    io:format("[child] Hello ~s\n", [Name]),
-    ok.
+    case Name of
+        undefined -> {error, unknown_person};
+        _         -> io:format("[child] Hello ~s\n", [Name]), ok
+    end.

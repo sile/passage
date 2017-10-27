@@ -76,7 +76,9 @@ The above `foo` function will be transformed as follows:
 ```erlang
 foo(Bin) ->
   try
-    passage_pd:start_span(foo, [{tags, #{application => example, module => example, foo => bar}}]),
+    passage_pd:start_span(
+      'example:foo/1',
+      [{tags, #{application => example, module => example, lien => 7, foo => bar}}]),
     passage_pd:set_tags(#{process => self(), size => byte_size(Bin)}),
     <<"foo", Bin/binary>>
   after

@@ -24,12 +24,14 @@
 %% ```
 %% foo(Bin) ->
 %%   try
-%%     passage_pd:start_span(foo, [{tags, #{application => example, module => example, foo => bar}}]),
+%%     passage_pd:start_span(
+%%       'example:foo/1',
+%%       [{tags, #{application => example, module => example, line => 7, foo => bar}}]),
 %%     passage_pd:set_tags(#{process => self(), size => byte_size(Bin)}),
 %%     <<"foo", Bin/binary>>
-%%    after
+%%   after
 %%     passage_pd:finish_span()
-%%    end.
+%%   end.
 %% '''
 %%
 %% === References ===
@@ -71,7 +73,8 @@
 
           trace   = false :: boolean(), % if `true' the next function will be traced
           tags      = #{} :: map(),
-          eval_tags = #{} :: map()
+          eval_tags = #{} :: map(),
+          error_if        :: string() | undefined
         }).
 
 %%------------------------------------------------------------------------------
@@ -102,9 +105,13 @@ walk_forms(Forms, State) ->
                            application => State0#state.application,
                            module => State0#state.module
                          }),
-                  EvalTags =
-                      proplists:get_value(eval_tags, Options, #{}),
-                  State1 = State0#state{trace = true, tags = Tags, eval_tags = EvalTags},
+                  State1 =
+                      State0#state{
+                        trace = true,
+                        tags = Tags,
+                        eval_tags = proplists:get_value(eval_tags, Options, #{}),
+                        error_if = proplists:get_value(error_if, Options)
+                       },
                   {State1, Acc};
               ({function, _, Name, _, Clauses} = Form, {State0 = #state{trace = true}, Acc}) ->
                   State1 = State0#state{function = Name},
@@ -120,11 +127,13 @@ walk_forms(Forms, State) ->
 -spec walk_clauses([clause()], #state{}) -> [clause()].
 walk_clauses(Clauses, State) ->
     [case Clause of
-         {clause, Line, Args, Guards, Body} ->
-             OperationName = {atom, Line, State#state.function},
+         {clause, Line, Args, Guards, Body0} ->
+             Mfa = io_lib:format("~s:~s/~p",
+                                 [State#state.module, State#state.function, length(Args)]),
+             OperationName = {atom, Line, binary_to_atom(list_to_binary(Mfa), utf8)},
              StartOptions =
                  erl_parse:abstract(
-                   [{tags, State#state.tags}],
+                   [{tags, maps:merge(State#state.tags, #{line => Line})}],
                    [{line, Line}]),
              StartSpan =
                  make_call_remote(
@@ -136,41 +145,67 @@ walk_clauses(Clauses, State) ->
                    {map_field_assoc, Line,
                     {atom, Line, 'process'}, make_call_remote(Line, erlang, self, [])} |
                    [begin
-                        case parse_expr_string(Line, ValueExprStr) of
-                            {error, Reason} ->
-                                error({bad_passage_eval_tag,
-                                       [{module, State#state.module},
-                                        {function, State#state.function},
-                                        {key, Key}, {value_expr, ValueExprStr},
-                                        {error, Reason}]});
-                            {ok, Exprs} ->
-                                {map_field_assoc, Line, {atom, Line, Key}, {block, Line, Exprs}}
-                        end
+                        Expr = parse_expr_string(Line, ValueExprStr, State),
+                        {map_field_assoc, Line, {atom, Line, Key}, Expr}
                     end || {Key, ValueExprStr} <- maps:to_list(State#state.eval_tags)]
                   ]},
              SetTags =
                  make_call_remote(Line, passage_pd, 'set_tags', [EvalTags]),
-
+             Body1 =
+                 case State#state.error_if of
+                     undefined  -> Body0;
+                     ErrorIf ->
+                         Pattern = parse_expr_string(Line, ErrorIf, State),
+                         TempVar = make_var(Line, "__Temp"),
+                         [{match, Line, TempVar, {block, Line, Body0}},
+                          {'case', Line, TempVar,
+                           [
+                           {clause, Line, [Pattern], [],
+                            [
+                             make_call_remote(
+                               Line, passage_pd, error_log,
+                               [{string, Line, "~P"},
+                                {cons, Line,
+                                 TempVar,
+                                 {cons, Line, {integer, Line, 16}, {nil, Line}}}]),
+                             TempVar
+                            ]},
+                            {clause, Line, [{var, Line, '_'}], [], [TempVar]}
+                           ]}]
+                     end,
+             io:format("~s\n", [erl_pp:exprs(Body1)]),
              FinishSpan =
                  make_call_remote(Line, passage_pd, 'finish_span', []),
              {clause, Line, Args, Guards,
               [
-               {'try', Line, [StartSpan, SetTags | Body], [], [], [FinishSpan]}
+               {'try', Line, [StartSpan, SetTags | Body1], [], [], [FinishSpan]}
               ]};
          _ ->
              Clause
      end || Clause <- Clauses].
 
--spec parse_expr_string(line(), string()) -> {ok, list()} | {error, term()}.
-parse_expr_string(Line, ExprStr) ->
-    case erl_scan:string(ExprStr ++ ".") of
-        {error, Reason, _} -> {error, {cannot_tokenize, Reason}};
-        {ok, Tokens0, _}   ->
-            Tokens1 = lists:map(fun (T) -> setelement(2, T, Line) end, Tokens0),
-            case erl_parse:parse_exprs(Tokens1) of
-                {error, Reason} -> {error, {cannot_parse, Reason}};
-                {ok, Exprs}     -> {ok, Exprs}
-            end
+-spec parse_expr_string(line(), string(), #state{}) -> expr().
+parse_expr_string(Line, ExprStr, State) ->
+    Result =
+        case erl_scan:string(ExprStr ++ ".") of
+            {error, Reason, _} -> {error, {cannot_tokenize, Reason}};
+            {ok, Tokens0, _}   ->
+                Tokens1 = lists:map(fun (T) -> setelement(2, T, Line) end, Tokens0),
+                case erl_parse:parse_exprs(Tokens1) of
+                    {error, Reason} -> {error, {cannot_parse, Reason}};
+                    {ok, [Expr]}    -> {ok, Expr};
+                    {ok, Exprs}     -> {error, {must_be_single_expr, Exprs}}
+                end
+        end,
+    case Result of
+        {ok, Expression}     -> Expression;
+        {error, ErrorReason} ->
+            error({eval_failed,
+                   [{module, State#state.module},
+                    {function, State#state.function},
+                    {line, Line},
+                    {expr, ExprStr},
+                    {error, ErrorReason}]})
     end.
 
 -spec get_module([form()]) -> module().
@@ -201,3 +236,15 @@ find_app_file([Dir | Dirs]) ->
             end;
         _ -> find_app_file(Dirs)
     end.
+
+-spec make_var(line(), string()) -> expr_var().
+make_var(Line, Prefix) ->
+    Seq =
+        case get({?MODULE, seq}) of
+            undefined -> 0;
+            Seq0      -> Seq0
+        end,
+    _ = put({?MODULE, seq}, Seq + 1),
+    Name =
+        list_to_atom(Prefix ++ "_" ++ integer_to_list(Line) ++ "_" ++ integer_to_list(Seq)),
+    {var, Line, Name}.
