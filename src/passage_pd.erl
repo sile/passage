@@ -44,7 +44,6 @@
 -export([set_baggage_items/1]).
 -export([get_baggage_items/0]).
 -export([log/1, log/2]).
--export([error_log/1, error_log/2, error_log/3, error_log/4]).
 
 %%------------------------------------------------------------------------------
 %% Macros
@@ -195,32 +194,6 @@ log(Fields) ->
 -spec log(passage:log_fields(), passage:log_options()) -> ok.
 log(Fields, Options) ->
     update_current_span(fun (Span) -> passage:log(Span, Fields, Options) end).
-
-%% @equiv error_log(Message, [])
--spec error_log(iodata()) -> ok.
-error_log(Message) ->
-    error_log(Message, []).
-
-%% @equiv error_log(Format, Data, #{})
--spec error_log(io:format(), [term()]) -> ok.
-error_log(Format, Data) ->
-    error_log(Format, Data, #{}).
-
-%% @equiv error_log(Format, Data, Fields, [])
--spec error_log(io:format(), [term()], passage:log_fields()) -> ok.
-error_log(Format, Data, Fields) ->
-    error_log(Format, Data, Fields, []).
-
-%% @doc Logs error message to the current span.
-%%
-%% This function logs `Fields` and
-%% `#{event => error, message => io_lib:format(Format, Data)}'.
-%%
-%% In addition, it sets the tag `#{error => true}' automatically.
--spec error_log(io:format(), [term()], passage:log_fields(), passage:log_options()) -> ok.
-error_log(Format, Data, Fields, Options) ->
-    update_current_span(
-      fun (Span) -> passage:error_log(Span, Format, Data, Fields, Options) end).
 
 %%------------------------------------------------------------------------------
 %% Internal Functions

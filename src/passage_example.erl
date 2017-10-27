@@ -23,10 +23,11 @@ hello(Name) ->
 %%------------------------------------------------------------------------------
 %% Internal Functions
 %%------------------------------------------------------------------------------
--passage_trace([{error_if, "{error, _}"}]).
+-passage_trace([{error_if, "{error, _}"}, error_if_exception]).
 -spec hello_child(atom()) -> ok | {error, term()}.
 hello_child(Name) ->
     case Name of
         undefined -> {error, unknown_person};
+        error     -> error(bad_name);
         _         -> io:format("[child] Hello ~s\n", [Name]), ok
     end.

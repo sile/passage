@@ -30,6 +30,8 @@
 %% '''
 -module(passage).
 
+-include("opentracing.hrl").
+
 %%------------------------------------------------------------------------------
 %% Exported API
 %%------------------------------------------------------------------------------
@@ -41,7 +43,6 @@
 -export([set_baggage_items/2]).
 -export([get_baggage_items/1]).
 -export([log/2, log/3]).
--export([error_log/2, error_log/3, error_log/4, error_log/5]).
 -export([inject_span/4, extract_span/4]).
 
 -export_type([tracer_id/0]).
@@ -144,10 +145,17 @@
 -type log_options() :: [log_option()].
 %% Options for {@link log/3}.
 
--type log_option() :: {time, erlang:timestamp()}.
+-type log_option() :: {time, erlang:timestamp()}
+                    | error | {error, boolean()}.
 %% <ul>
 %%   <li><b>time</b>: Timestamp of the log. The default value is `erlang:timestamp()'.</li>
+%%   <li><b>error</b>:
+%%     If this option presents, the log will be treated as an error log.
+%%     That is the `event' field with the value `error' will be added automatically.
+%%     In addition, the tag `#{error => true}' will be set to the calling span.
+%%   </li>
 %% </ul>
+
 %%------------------------------------------------------------------------------
 %% Exported Functions
 %%------------------------------------------------------------------------------
@@ -233,38 +241,15 @@ log(Span, Fields) ->
 
 %% @doc Logs the `Fields' to `Span'.
 -spec log(maybe_span(), log_fields(), log_options()) -> maybe_span().
-log(undefined, _, _)       -> undefined;
-log(Span, Fields, Options) -> passage_span:log(Span, Fields, Options).
-
-%% @equiv error_log(Span, Message, [])
--spec error_log(maybe_span(), iodata()) -> maybe_span().
-error_log(Span, Message) ->
-    error_log(Span, Message, []).
-
-%% @equiv error_log(Span, Format, Data, #{})
--spec error_log(maybe_span(), io:format(), [term()]) -> maybe_span().
-error_log(Span, Format, Data) ->
-    error_log(Span, Format, Data, #{}).
-
-%% @equiv error_log(Span, Format, Data, Fields, [])
--spec error_log(maybe_span(), io:format(), [term()], log_fields()) -> maybe_span().
-error_log(Span, Format, Data, Fields) ->
-    error_log(Span, Format, Data, Fields, []).
-
-%% @doc Logs error message to `Span'.
-%%
-%% This function logs `Fields` and
-%% `#{event => error, message => io_lib:format(Format, Data)}'.
-%%
-%% In addition, it sets the tag `#{error => true}' automatically.
--spec error_log(maybe_span(), io:format(), [term()], log_fields(), log_options()) ->
-                       maybe_span().
-error_log(undefined, _, _, _, _)               -> undefined;
-error_log(Span0, Format, Data, Fields, Options) ->
-    Message = io_lib:format(Format, Data),
-    Fields1 = maps:merge(Fields, #{event => error, message => Message}),
-    Span1 = passage_span:log(Span0, Fields1, Options),
-    passage_span:set_tags(Span1, #{error => true}).
+log(undefined, _, _)         -> undefined;
+log(Span0, Fields0, Options) ->
+    case proplists:get_value(error, Options, false) of
+        false -> passage_span:log(Span0, Fields0, Options);
+        true  ->
+            Fields1 = maps:merge(Fields0, #{?LOG_FIELD_EVENT => error}),
+            Span1 = passage_span:log(Span0, Fields1, Options),
+            passage_span:set_tags(Span1, #{?TAG_ERROR => true})
+    end.
 
 %% @doc Injects `Span' into `Carrier'.
 -spec inject_span(Span, Format, InjectFun, Carrier) -> Carrier when

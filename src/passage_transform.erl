@@ -41,10 +41,27 @@
 %% </ul>
 -module(passage_transform).
 
+-include("opentracing.hrl").
+
 %%------------------------------------------------------------------------------
 %% Exported API
 %%------------------------------------------------------------------------------
 -export([parse_transform/2]).
+
+-export_type([passage_trace_option/0]).
+
+%%------------------------------------------------------------------------------
+%% Exported Types
+%%------------------------------------------------------------------------------
+-type passage_trace_option() :: {tracer, passage:tracer_id()} |
+                                {tags, passage:tags()} |
+                                {eval_tags, #{passage:tag_name() => string()}} |
+                                {child_of, string()} |
+                                {follows_from, string()} |
+                                {error_if, string()} |
+                                error_if_exception.
+%% TODO: doc
+%% TODO: warnings unknown options
 
 %%------------------------------------------------------------------------------
 %% Types & Records
@@ -74,7 +91,8 @@
           trace   = false :: boolean(), % if `true' the next function will be traced
           tags      = #{} :: map(),
           eval_tags = #{} :: map(),
-          error_if        :: string() | undefined
+          error_if        :: string() | undefined,
+          error_if_exception = false :: boolean()
         }).
 
 %%------------------------------------------------------------------------------
@@ -110,7 +128,9 @@ walk_forms(Forms, State) ->
                         trace = true,
                         tags = Tags,
                         eval_tags = proplists:get_value(eval_tags, Options, #{}),
-                        error_if = proplists:get_value(error_if, Options)
+                        error_if = proplists:get_value(error_if, Options),
+                        error_if_exception =
+                            proplists:is_defined(error_if_exception, Options)
                        },
                   {State1, Acc};
               ({function, _, Name, _, Clauses} = Form, {State0 = #state{trace = true}, Acc}) ->
@@ -123,6 +143,9 @@ walk_forms(Forms, State) ->
           {State, []},
           Forms),
     lists:reverse(ResultFroms).
+
+-define(MAP_FIELD(Line, K, V),
+        {map_field_assoc, Line, {atom, Line, K}, V}).
 
 -spec walk_clauses([clause()], #state{}) -> [clause()].
 walk_clauses(Clauses, State) ->
@@ -142,11 +165,9 @@ walk_clauses(Clauses, State) ->
              EvalTags =
                  {map, Line,
                   [
-                   {map_field_assoc, Line,
-                    {atom, Line, 'process'}, make_call_remote(Line, erlang, self, [])} |
+                   ?MAP_FIELD(Line, process, make_call_remote(Line, erlang, self, [])) |
                    [begin
-                        Expr = parse_expr_string(Line, ValueExprStr, State),
-                        {map_field_assoc, Line, {atom, Line, Key}, Expr}
+                        ?MAP_FIELD(Line, Key, parse_expr_string(Line, ValueExprStr, State))
                     end || {Key, ValueExprStr} <- maps:to_list(State#state.eval_tags)]
                   ]},
              SetTags =
@@ -163,22 +184,55 @@ walk_clauses(Clauses, State) ->
                            {clause, Line, [Pattern], [],
                             [
                              make_call_remote(
-                               Line, passage_pd, error_log,
-                               [{string, Line, "~P"},
-                                {cons, Line,
-                                 TempVar,
-                                 {cons, Line, {integer, Line, 16}, {nil, Line}}}]),
+                               Line, passage_pd, log,
+                               [
+                                {map, Line, [?MAP_FIELD(Line, ?LOG_FIELD_MESSAGE, TempVar)]},
+                                {cons, Line, {atom, Line, error}, {nil, Line}}
+                               ]),
                              TempVar
                             ]},
                             {clause, Line, [{var, Line, '_'}], [], [TempVar]}
                            ]}]
                      end,
-             io:format("~s\n", [erl_pp:exprs(Body1)]),
              FinishSpan =
                  make_call_remote(Line, passage_pd, 'finish_span', []),
+
+             Catch =
+                 case State#state.error_if_exception of
+                     false -> [];
+                     true  ->
+                         ClassVar = make_var(Line, "__Class"),
+                         ErrorVar = make_var(Line, "__Error"),
+                         [
+                          {clause, Line,
+                           [{tuple, Line, [ClassVar, ErrorVar, {var, Line, '_'}]}],
+                           [],
+                           [
+                            make_call_remote(
+                              Line, passage_pd, log,
+                              [
+                               {map, Line,
+                                [
+                                 ?MAP_FIELD(Line, ?LOG_FIELD_MESSAGE, ErrorVar),
+                                 ?MAP_FIELD(Line, ?LOG_FIELD_ERROR_KIND, ClassVar),
+                                 ?MAP_FIELD(
+                                    Line, ?LOG_FIELD_STACK,
+                                    make_call_remote(Line, erlang, get_stacktrace, []))
+
+                                ]},
+                               {cons, Line, {atom, Line, error}, {nil, Line}}
+                              ]),
+                            make_call_remote(
+                              Line, erlang, raise,
+                              [ClassVar, ErrorVar,
+                               make_call_remote(Line, erlang, get_stacktrace, [])])
+                           ]
+                          }
+                         ]
+                 end,
              {clause, Line, Args, Guards,
               [
-               {'try', Line, [StartSpan, SetTags | Body1], [], [], [FinishSpan]}
+               {'try', Line, [StartSpan, SetTags | Body1], [], Catch, [FinishSpan]}
               ]};
          _ ->
              Clause

@@ -110,7 +110,7 @@ passage_pd_test_() ->
        fun () ->
                ok = start_test_tracer(),
                ok = passage_pd:start_root_span(root, test_tracer),
-               ok = passage_pd:error_log("Hello World", [], #{kind => greeting}),
+               ok = passage_pd:log(#{message => "Hello World", kind => greeting}, [error]),
 
                ok = passage_pd:finish_span(),
                [FinishedSpan] = finished_spans(),

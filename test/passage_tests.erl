@@ -97,7 +97,7 @@ passage_test_() ->
        fun () ->
                ok = start_test_tracer(),
                Span0 = passage:start_root_span(root, test_tracer),
-               Span1 = passage:error_log(Span0, "Hello World", [], #{kind => greeting}),
+               Span1 = passage:log(Span0, #{message => "Hello World", kind => greeting}, [error]),
 
                passage:finish_span(Span1),
                [FinishedSpan] = finished_spans(),
