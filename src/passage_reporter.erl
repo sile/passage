@@ -22,14 +22,10 @@
 -export([is_reporter/1]).
 -export([get_module/1]).
 -export([get_state/1]).
+-export([report/2]).
 
 -export_type([reporter/0]).
 -export_type([state/0]).
-
-%%------------------------------------------------------------------------------
-%% Application Internal API
-%%------------------------------------------------------------------------------
--export([report/2]).
 
 %%------------------------------------------------------------------------------
 %% Callback API
@@ -79,10 +75,7 @@ get_module(Reporter) ->
 get_state(Reporter) ->
     Reporter#?REPORTER.state.
 
-%%------------------------------------------------------------------------------
-%% Application Internal Functions
-%%------------------------------------------------------------------------------
-%% @private
+%% @doc Reports the given finished span.
 -spec report(reporter(), passage_span:span()) -> ok.
 report(#?REPORTER{module = Module, state = State}, Span) ->
     Module:report(State, Span),

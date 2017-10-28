@@ -22,14 +22,10 @@
 -export([is_sampler/1]).
 -export([get_module/1]).
 -export([get_state/1]).
+-export([is_sampled/1]).
 
 -export_type([sampler/0]).
 -export_tyep([state/0]).
-
-%%------------------------------------------------------------------------------
-%% Application Internal API
-%%------------------------------------------------------------------------------
--export([is_sampled/3]).
 
 %%------------------------------------------------------------------------------
 %% Callback API
@@ -81,10 +77,7 @@ get_module(Sampler) ->
 get_state(Sampler) ->
     Sampler#?SAMPLER.state.
 
-%%------------------------------------------------------------------------------
-%% Application Internal Functions
-%%------------------------------------------------------------------------------
-%% @private
+%% @doc Determines to sample the next span which has the given name and tags.
 -spec is_sampled(sampler(), passage:operation_name(), passage:tags()) -> boolean().
 is_sampled(#?SAMPLER{module = Module, state = State}, Name, Tags) ->
     Module:is_sampled(State, Name, Tags).
