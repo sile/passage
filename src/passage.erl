@@ -133,9 +133,11 @@
 -type finish_span_options() :: [finish_span_option()].
 %% Options for {@link finish_span/2}.
 
--type finish_span_option() :: {time, erlang:timestamp()}.
+-type finish_span_option() :: {time, erlang:timestamp()}
+                            | {lifetime, pid()}.
 %% <ul>
 %%   <li><b>time</b>: Finish timestamp of the span. The default value is `erlang:timestamp()'.</li>
+%%   <li><b>lifetime</b>: If this option is specified, the report of the finished span will be delayed until the lifetime process exits.</li>
 %% </ul>
 
 -type log_options() :: [log_option()].
@@ -204,7 +206,15 @@ finish_span(Span) ->
 -spec finish_span(maybe_span(), finish_span_options()) -> ok.
 finish_span(undefined, _)  -> ok;
 finish_span(Span, Options) ->
-    passage_span:finish(Span, Options).
+    case lists:keyfind(lifetime, 1, Options) of
+        false    -> passage_span:finish(Span, Options);
+        {_, Pid} ->
+            spawn(fun () ->
+                          Monitor = monitor(process, Pid),
+                          finish_span_when_process_exits(Monitor, Span, Options)
+                  end),
+            ok
+    end.
 
 %% @doc Sets the operation name of `Span' to `Name'.
 -spec set_operation_name(maybe_span(), operation_name()) -> maybe_span().
@@ -280,4 +290,30 @@ extract_span(Tracer, Format, IterateFun, Carrier) ->
                 error         -> undefined;
                 {ok, Context} -> passage_span:make_extracted_span(Tracer, Context)
             end
+    end.
+
+%%------------------------------------------------------------------------------
+%% Interal Functions
+%%------------------------------------------------------------------------------
+-spec finish_span_when_process_exits(
+        reference(), passage_span:span(), finish_span_options()) -> ok.
+finish_span_when_process_exits(Monitor, Span0, Options) ->
+    receive
+        {'DOWN', Monitor, _, _, Reason} ->
+            IsError =
+                case Reason of
+                    normal        -> false;
+                    shutdown      -> false;
+                    {shutdown, _} -> false;
+                    _             -> true
+                end,
+            Span1 = log(Span0, #{?LOG_FIELD_EVENT => exit, 'exit.reason' => Reason}),
+            Span2 =
+                case IsError of
+                    false -> Span1;
+                    true  -> set_tags(Span1, #{?TAG_ERROR => true})
+                end,
+            passage_span:finish(Span2, Options);
+        _ ->
+            finish_span_when_process_exits(Monitor, Span0, Options)
     end.

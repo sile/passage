@@ -107,6 +107,22 @@ passage_test_() ->
                ?assertEqual(#{error => true},
                             passage_span:get_tags(FinishedSpan))
        end},
+      {"lifetime",
+       fun () ->
+               ok = start_test_tracer(),
+               Span = passage:start_span(root, [{tracer, test_tracer}]),
+               Pid = spawn(timer, sleep, [infinity]),
+               passage:finish_span(Span, [{lifetime, Pid}]),
+
+               ?assertEqual([], finished_spans()),
+
+               exit(Pid, kill),
+               monitor(process, Pid),
+               receive {'DOWN', _, _, Pid, _} -> ok end,
+               timer:sleep(1),
+
+               ?assertMatch([_], finished_spans())
+       end},
       {"'sampling.priority' = 0",
        fun () ->
                ok = start_test_tracer(),
