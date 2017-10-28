@@ -30,6 +30,8 @@
 %% '''
 -module(passage_pd).
 
+-include("opentracing.hrl").
+
 %%------------------------------------------------------------------------------
 %% Exported API
 %%------------------------------------------------------------------------------
@@ -43,10 +45,24 @@
 -export([get_baggage_items/0]).
 -export([log/1, log/2]).
 
+-export_type([with_span_option/0, with_span_options/0]).
+
 %%------------------------------------------------------------------------------
 %% Macros
 %%------------------------------------------------------------------------------
 -define(ANCESTORS_KEY, passage_span_ancestors).
+
+%%------------------------------------------------------------------------------
+%% Exported Types
+%%------------------------------------------------------------------------------
+-type with_span_options() :: [with_span_option()].
+%% Options for {@link with_span/3}
+
+-type with_span_option() :: error_if_exception | {error_if_exception, boolean()}
+                          | passage:start_span_option().
+%% <ul>
+%%  <li>`error_if_exception': If this flag presents, the exception which raised while executing the function will be logged and the span will be tagged as error.</li>
+%% </ul>
 
 %%------------------------------------------------------------------------------
 %% Exported Functions
@@ -96,15 +112,34 @@ with_span(OperationName, Fun) ->
     with_span(OperationName, [], Fun).
 
 %% @doc Starts a span enclosing `Fun'.
--spec with_span(passage:operation_name(), passage:start_span_options(), Fun) -> Result when
+-spec with_span(passage:operation_name(), with_span_options(), Fun) -> Result when
       Fun :: fun (() -> Result),
       Result :: term().
 with_span(OperationName, Options, Fun) ->
-    try
-        start_span(OperationName, Options),
-        Fun()
-    after
-        finish_span()
+    ErrorIfException = proplists:get_value(error_if_exception, Options, false),
+    case ErrorIfException of
+        false ->
+            try
+                start_span(OperationName, Options),
+                Fun()
+            after
+                finish_span()
+            end;
+        true ->
+            try
+                start_span(OperationName, Options),
+                Fun()
+            catch
+                Class:Error ->
+                    Stack = erlang:get_stacktrace(),
+                    log(#{?LOG_FIELD_ERROR_KIND => Class,
+                          ?LOG_FIELD_MESSAGE => Error,
+                          ?LOG_FIELD_STACK => Stack},
+                        [error]),
+                    erlang:raise(Class, Error, Stack)
+            after
+                finish_span()
+            end
     end.
 
 %% @doc Returns the current span stored in the process dictionary of the calling process.
