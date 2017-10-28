@@ -22,7 +22,7 @@
 -export([is_sampler/1]).
 -export([get_module/1]).
 -export([get_state/1]).
--export([is_sampled/1]).
+-export([is_sampled/3]).
 
 -export_type([sampler/0]).
 -export_tyep([state/0]).
