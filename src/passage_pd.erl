@@ -38,6 +38,7 @@
 -export([start_span/1, start_span/2]).
 -export([finish_span/0, finish_span/1]).
 -export([with_span/2, with_span/3]).
+-export([with_parent_span/2]).
 -export([current_span/0]).
 -export([set_operation_name/1]).
 -export([set_tags/1]).
@@ -142,6 +143,21 @@ with_span(OperationName, Options, Fun) ->
             end
     end.
 
+%% @doc Saves `ParentSpan' in the current process dictionary then executes `Fun'.
+%%
+%% Before returning from the function,
+%% `ParentSpan' will be popped from the process dictionary.
+-spec with_parent_span(passage:maybe_span(), Fun) -> Result when
+      Fun    :: fun (() -> Result),
+      Result :: term().
+with_parent_span(ParentSpan, Fun) ->
+    push_span(ParentSpan),
+    try
+        Fun()
+    after
+        pop_span()
+    end.
+
 %% @doc Returns the current span stored in the process dictionary of the calling process.
 -spec current_span() -> passage:maybe_span().
 current_span() ->
@@ -215,6 +231,10 @@ update_current_span(Fun) ->
             Span1 = Fun(Span0),
             put_ancestors([Span1 | Spans])
     end.
+
+-spec push_span(passage:maybe_span()) -> ok.
+push_span(Span) ->
+    put_ancestors([Span | get_ancestors()]).
 
 -spec pop_span() -> passage:maybe_span().
 pop_span() ->
