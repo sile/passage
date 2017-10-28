@@ -43,6 +43,7 @@
 -export([get_baggage_items/1]).
 -export([log/2, log/3]).
 -export([inject_span/4, extract_span/4]).
+-export([strip_span/1]).
 
 -export_type([tracer_id/0]).
 -export_type([maybe_span/0]).
@@ -291,6 +292,11 @@ extract_span(Tracer, Format, IterateFun, Carrier) ->
                 {ok, Context} -> passage_span:make_extracted_span(Tracer, Context)
             end
     end.
+
+%% @doc Strips the tags, logs and references from the given span.
+-spec strip_span(maybe_span()) -> maybe_span().
+strip_span(undefined) -> undefined;
+strip_span(Span)      -> passage_span:strip(Span).
 
 %%------------------------------------------------------------------------------
 %% Interal Functions

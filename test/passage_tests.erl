@@ -107,6 +107,24 @@ passage_test_() ->
                ?assertEqual(#{error => true},
                             passage_span:get_tags(FinishedSpan))
        end},
+      {"strip",
+       fun () ->
+               ok = start_test_tracer(),
+               Root = passage:strip_span(passage:start_span(root, [{tracer, test_tracer}])),
+
+               Span0 = passage:start_span(child, [{child_of, Root}]),
+               Span1 = passage:set_tags(Span0, #{a => b}),
+               Span2 = passage:log(Span1, #{message => hello}, [{time, 0}]),
+
+               ?assertEqual(#{a => b}, passage_span:get_tags(Span2)),
+               ?assertEqual([{#{message => hello}, 0}], passage_span:get_logs(Span2)),
+               ?assertEqual([{child_of, Root}], passage_span:get_refs(Span2)),
+
+               Span3 = passage:strip_span(Span2),
+               ?assertEqual(#{}, passage_span:get_tags(Span3)),
+               ?assertEqual([], passage_span:get_logs(Span3)),
+               ?assertEqual([], passage_span:get_refs(Span3))
+       end},
       {"lifetime",
        fun () ->
                ok = start_test_tracer(),

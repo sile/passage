@@ -72,6 +72,7 @@
 -export([set_baggage_items/2]).
 -export([get_baggage_items/1]).
 -export([get_tracer/1]).
+-export([strip/1]).
 
 %%------------------------------------------------------------------------------
 %% Macros & Records
@@ -246,6 +247,11 @@ get_baggage_items(Span) ->
 get_tracer(Span) ->
     Span#?SPAN.tracer.
 
+%% @private
+-spec strip(span()) -> span().
+strip(Span) ->
+    Span#?SPAN{refs = [], tags = #{}, logs = []}.
+
 %%------------------------------------------------------------------------------
 %% Internal Functions
 %%------------------------------------------------------------------------------
@@ -284,7 +290,3 @@ collect_valid_refs(Options) ->
           (_)                 -> false
       end,
       Options).
-
--spec strip(span()) -> span().
-strip(Span) ->
-    Span#?SPAN{refs = [], tags = #{}, logs = []}.
