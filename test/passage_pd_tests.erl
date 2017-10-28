@@ -164,6 +164,11 @@ passage_pd_test_() ->
                ok = passage_pd:start_span(child, [{follows_from, RootSpan}]),
                ok = passage_pd:finish_span(),
                ?assertMatch([_Span], finished_spans())
+       end},
+      {"example module",
+       fun () ->
+               ok = start_test_tracer(),
+               passage_pd:with_span(example, fun () -> passage_example:hello(foo) end)
        end}
       ]}.
 
