@@ -23,8 +23,8 @@
 %%
 %% ```
 %% foo(Bin) ->
+%    passage_pd:start_span('example:foo/1', []),
 %%   try
-%%     passage_pd:start_span('example:foo/1', []),
 %%     passage_pd:set_tags(
 %%         fun () ->
 %%             #{
@@ -193,111 +193,21 @@ walk_clauses(Clauses, State) ->
 
 -spec walk_clause(clause(), #state{}) -> clause().
 walk_clause({clause, Line, Args, Guards, Body0}, State) ->
-    Mfa = io_lib:format("~s:~s/~p",
-                        [State#state.module, State#state.function, length(Args)]),
-    OperationName = {atom, Line, binary_to_atom(list_to_binary(Mfa), utf8)},
-    StartOptions0 =
-        case State#state.tracer of
-            error        -> erl_parse:abstract([]);
-            {ok, Tracer} -> erl_parse:abstract([{tracer, Tracer}])
-        end,
-    StartOptions1 =
-        case State#state.child_of of
-            undefined -> StartOptions0;
-            ChildOf   ->
-                {cons, Line,
-                 ?PAIR(Line, child_of, parse_expr_string(Line, ChildOf, State)),
-                 StartOptions0}
-        end,
-    StartOptions2 =
-        case State#state.follows_from of
-            undefined   -> StartOptions1;
-            FollowsFrom ->
-                {cons, Line,
-                 ?PAIR(Line, follows_from,
-                       parse_expr_string(Line, FollowsFrom, State)),
-                 StartOptions1}
-        end,
+    OperationName = make_operation_name(Line, length(Args), State),
+    StartSpanOptions = make_start_span_options(Line, State),
     StartSpan =
-        make_call_remote(
-          Line, passage_pd, 'start_span', [OperationName, StartOptions2]),
+        make_call_remote(Line, passage_pd, 'start_span', [OperationName, StartSpanOptions]),
 
-    Tags =
-        {map, Line,
-         [
-          ?MAP_FIELD(Line, 'location.pid',
-                     make_call_remote(Line, erlang, self, [])),
-          ?MAP_FIELD(Line, 'location.application',
-                     {atom, Line, State#state.application}),
-          ?MAP_FIELD(Line, 'location.module', {atom, Line, State#state.module}),
-          ?MAP_FIELD(Line, 'location.line', {integer, Line, Line}) |
-          [begin
-               ?MAP_FIELD(Line, Key, parse_expr_string(Line, ValueExprStr, State))
-           end || {Key, ValueExprStr} <- maps:to_list(State#state.tags)]
-         ]},
-    SetTags =
-        make_call_remote(Line, passage_pd, 'set_tags', [make_fun(Line, [Tags])]),
-    Body1 =
-        case State#state.error_if of
-            undefined  -> Body0;
-            ErrorIf ->
-                Pattern = parse_expr_string(Line, ErrorIf, State),
-                TempVar = make_var(Line, "__Temp"),
-                [{match, Line, TempVar, {block, Line, Body0}},
-                 {'case', Line, TempVar,
-                  [
-                   {clause, Line, [Pattern], [],
-                    [
-                     make_call_remote(
-                       Line, passage_pd, log,
-                       [
-                        {map, Line, [?MAP_FIELD(Line, ?LOG_FIELD_MESSAGE, TempVar)]},
-                        {cons, Line, {atom, Line, error}, {nil, Line}}
-                       ]),
-                     TempVar
-                    ]},
-                   {clause, Line, [{var, Line, '_'}], [], [TempVar]}
-                  ]}]
-        end,
-    FinishSpan =
-        make_call_remote(Line, passage_pd, 'finish_span', []),
+    Tags = make_tags(Line, State),
+    SetTags = make_call_remote(Line, passage_pd, 'set_tags', [make_fun(Line, [Tags])]),
+    Body1 = make_body(Line, Body0, State),
+    FinishSpan = make_call_remote(Line, passage_pd, 'finish_span', []),
 
-    Catch =
-        case State#state.error_if_exception of
-            false -> [];
-            true  ->
-                ClassVar = make_var(Line, "__Class"),
-                ErrorVar = make_var(Line, "__Error"),
-                [
-                 {clause, Line,
-                  [{tuple, Line, [ClassVar, ErrorVar, {var, Line, '_'}]}],
-                  [],
-                  [
-                   make_call_remote(
-                     Line, passage_pd, log,
-                     [
-                      {map, Line,
-                       [
-                        ?MAP_FIELD(Line, ?LOG_FIELD_MESSAGE, ErrorVar),
-                        ?MAP_FIELD(Line, ?LOG_FIELD_ERROR_KIND, ClassVar),
-                        ?MAP_FIELD(
-                           Line, ?LOG_FIELD_STACK,
-                           make_call_remote(Line, erlang, get_stacktrace, []))
-
-                       ]},
-                      {cons, Line, {atom, Line, error}, {nil, Line}}
-                     ]),
-                   make_call_remote(
-                     Line, erlang, raise,
-                     [ClassVar, ErrorVar,
-                      make_call_remote(Line, erlang, get_stacktrace, [])])
-                  ]
-                 }
-                ]
-        end,
+    CatchClauses = make_catch_clauses(Line, State),
     {clause, Line, Args, Guards,
      [
-      {'try', Line, [StartSpan, SetTags | Body1], [], Catch, [FinishSpan]}
+      StartSpan,
+      {'try', Line, [SetTags | Body1], [], CatchClauses, [FinishSpan]}
      ]};
 walk_clause(Clause, _State) ->
     Clause.
@@ -371,3 +281,97 @@ make_var(Line, Prefix) ->
 make_fun(Line, Body) ->
     {'fun', Line,
      {clauses, [{clause, Line, [], [], Body}]}}.
+
+-spec make_operation_name(line(), non_neg_integer(), #state{}) -> expr().
+make_operation_name(Line, Arity, State) ->
+    Mfa = io_lib:format("~s:~s/~p", [State#state.module, State#state.function, Arity]),
+    {atom, Line, binary_to_atom(list_to_binary(Mfa), utf8)}.
+
+
+-spec make_start_span_options(line(), #state{}) -> expr().
+make_start_span_options(Line, State) ->
+    Options0 =
+        case State#state.tracer of
+            error        -> erl_parse:abstract([], [{line, Line}]);
+            {ok, Tracer} -> erl_parse:abstract([{tracer, Tracer}], [{line, Line}])
+        end,
+    Options1 =
+        case State#state.child_of of
+            undefined -> Options0;
+            ChildOf   ->
+                {cons, Line,
+                 ?PAIR(Line, child_of, parse_expr_string(Line, ChildOf, State)),
+                 Options0}
+        end,
+    Options2 =
+        case State#state.follows_from of
+            undefined   -> Options1;
+            FollowsFrom ->
+                {cons, Line,
+                 ?PAIR(Line, follows_from, parse_expr_string(Line, FollowsFrom, State)),
+                 Options1}
+        end,
+    Options2.
+
+-spec make_tags(line(), #state{}) -> expr().
+make_tags(Line, State) ->
+    {map, Line,
+     [
+      ?MAP_FIELD(Line, 'location.pid', make_call_remote(Line, erlang, self, [])),
+      ?MAP_FIELD(Line, 'location.application', {atom, Line, State#state.application}),
+      ?MAP_FIELD(Line, 'location.module', {atom, Line, State#state.module}),
+      ?MAP_FIELD(Line, 'location.line', {integer, Line, Line}) |
+      [begin
+           ?MAP_FIELD(Line, Key, parse_expr_string(Line, ValueExprStr, State))
+       end || {Key, ValueExprStr} <- maps:to_list(State#state.tags)]
+     ]}.
+
+-spec make_error_log(line(), expr()) -> expr().
+make_error_log(Line, Fields) ->
+    make_call_remote(
+      Line, passage_pd, log,
+      [
+       {map, Line, Fields},
+       {cons, Line, {atom, Line, error}, {nil, Line}}
+      ]).
+
+-spec make_body(line(), [expr()], #state{}) -> [expr()].
+make_body(_, Body, #state{error_if = undefined}) ->
+    Body;
+make_body(Line, Body, State = #state{error_if = ErrorIf}) ->
+    Pattern = parse_expr_string(Line, ErrorIf, State),
+    TempVar = make_var(Line, "__Temp"),
+    [{match, Line, TempVar, {block, Line, Body}},
+     {'case', Line, TempVar,
+      [
+       {clause, Line, [Pattern], [],
+        [
+         make_error_log(Line, [?MAP_FIELD(Line, ?LOG_FIELD_MESSAGE, TempVar)]),
+         TempVar
+        ]},
+       {clause, Line, [{var, Line, '_'}], [], [TempVar]}
+      ]}].
+
+-spec make_catch_clauses(line(), #state{}) -> [clause()].
+make_catch_clauses(_, #state{error_if_exception = false}) ->
+    [];
+make_catch_clauses(Line, _) ->
+    ClassVar = make_var(Line, "__Class"),
+    ErrorVar = make_var(Line, "__Error"),
+    GetStrackTrace = make_call_remote(Line, erlang, get_stacktrace, []),
+    [
+     {clause, Line,
+      [{tuple, Line, [ClassVar, ErrorVar, {var, Line, '_'}]}],
+      [],
+      [
+       make_error_log(
+         Line,
+         [?MAP_FIELD(Line, ?LOG_FIELD_MESSAGE, ErrorVar),
+          ?MAP_FIELD(Line, ?LOG_FIELD_ERROR_KIND, ClassVar),
+          ?MAP_FIELD(Line, ?LOG_FIELD_STACK, GetStrackTrace)]),
+       make_call_remote(
+         Line, erlang, raise,
+         [ClassVar, ErrorVar, GetStrackTrace])
+      ]
+     }
+    ].
