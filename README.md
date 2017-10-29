@@ -75,8 +75,8 @@ foo(Bin) ->
 The above `foo` function will be transformed as follows:
 ```erlang
 foo(Bin) ->
+  passage_pd:start_span('example:foo/1', []),
   try
-    passage_pd:start_span('example:foo/1', []),
     passage_pd:set_tags(
         fun () ->
             #{
