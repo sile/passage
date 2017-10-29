@@ -83,11 +83,14 @@ start_span(OperationName, Options) ->
     Ancestors = get_ancestors(),
     Options1 =
         case Ancestors of
-            []           -> Options;
-            [Parent | _] -> [{child_of, Parent} | Options]
+            []              -> Options;
+            [undefined | _] -> Options;
+            [Parent    | _] -> [Parent | Options]
         end,
-    Span = passage:start_span(OperationName, Options1),
-    put_ancestors([Span | Ancestors]).
+    case passage:start_span(OperationName, Options1) of
+        undefined -> put_ancestors([undefined        | Ancestors]);
+        Span      -> put_ancestors([{child_of, Span} | Ancestors])
+    end.
 
 %% @equiv finish_span([])
 -spec finish_span() -> ok.
@@ -102,7 +105,7 @@ finish_span() ->
 finish_span(Options) ->
     case pop_span() of
         undefined -> ok;
-        Span      -> passage:finish_span(Span, Options)
+        {_, Span} -> passage:finish_span(Span, Options)
     end.
 
 %% @equiv with_span(OperationName, [], Fun)
@@ -147,9 +150,17 @@ with_span(OperationName, Options, Fun) ->
 %%
 %% Before returning from the function,
 %% `ParentSpan' will be popped from the process dictionary.
--spec with_parent_span(passage:maybe_span(), Fun) -> Result when
-      Fun    :: fun (() -> Result),
-      Result :: term().
+-spec with_parent_span(ParentSpan, Fun) -> Result when
+      ParentSpan :: {passage:ref_type(), passage:maybe_span()},
+      Fun        :: fun (() -> Result),
+      Result     :: term().
+with_parent_span({_, undefined}, Fun) ->
+    push_span(undefined),
+    try
+        Fun()
+    after
+        pop_span()
+    end;
 with_parent_span(ParentSpan, Fun) ->
     push_span(ParentSpan),
     try
@@ -162,9 +173,8 @@ with_parent_span(ParentSpan, Fun) ->
 -spec current_span() -> passage:maybe_span().
 current_span() ->
     case get(?ANCESTORS_KEY) of
-        undefined  -> undefined;
-        []         -> undefined;
-        [Span | _] -> Span
+        [{_, Span} | _] -> Span;
+        _               -> undefined
     end.
 
 %% @doc Sets the operation name of the current span to `OperationName'.
@@ -212,14 +222,14 @@ log(Fields, Options) ->
 %%------------------------------------------------------------------------------
 %% Internal Functions
 %%------------------------------------------------------------------------------
--spec get_ancestors() -> [passage:maybe_span()].
+-spec get_ancestors() -> [passage:ref() | undefined].
 get_ancestors() ->
     case get(?ANCESTORS_KEY) of
         undefined -> [];
         Ancestors -> Ancestors
     end.
 
--spec put_ancestors([passage:maybe_span()]) -> ok.
+-spec put_ancestors([passage:ref() | undefined]) -> ok.
 put_ancestors(Ancestors) ->
     put(?ANCESTORS_KEY, Ancestors),
     ok.
@@ -231,16 +241,16 @@ update_current_span(Fun) ->
         undefined       -> ok;
         []              -> ok;
         [undefined | _] -> ok;
-        [Span0 | Spans] ->
+        [{Type, Span0} | Spans] ->
             Span1 = Fun(Span0),
-            put_ancestors([Span1 | Spans])
+            put_ancestors([{Type, Span1} | Spans])
     end.
 
--spec push_span(passage:maybe_span()) -> ok.
+-spec push_span(passage:ref() | undefined) -> ok.
 push_span(Span) ->
     put_ancestors([Span | get_ancestors()]).
 
--spec pop_span() -> passage:maybe_span().
+-spec pop_span() -> passage:ref() | undefined.
 pop_span() ->
     case get(?ANCESTORS_KEY) of
         undefined      -> undefined;
