@@ -26,7 +26,11 @@
 %%   try
 %%     passage_pd:start_span(
 %%       'example:foo/1',
-%%       [{tags, #{application => example, module => example, line => 7, foo => bar}}]),
+%%       [{tags, #{'location.pid' => self(),
+%%                 'location.application' => example,
+%%                 'location.module' => example,
+%%                 'location.line' => 7,
+%%                 foo => bar}}]),
 %%     passage_pd:set_tags(#{process => self(), size => byte_size(Bin)}),
 %%     <<"foo", Bin/binary>>
 %%   after
@@ -171,8 +175,8 @@ walk_forms(Forms, State) ->
                       maps:merge(
                         proplists:get_value(tags, Options, #{}),
                         #{
-                           application => State0#state.application,
-                           module => State0#state.module
+                           'location.application' => State0#state.application,
+                           'location.module' => State0#state.module
                          }),
                   Tracer =
                       case lists:keyfind(tracer, 1, Options) of
@@ -218,7 +222,7 @@ walk_clauses(Clauses, State) ->
                         error        -> [];
                         {ok, Tracer} -> [{tracer, Tracer}]
                     end],
-                   [{line, Line}]),
+                   [{'location.line', Line}]),
              StartOptions1 =
                  case State#state.child_of of
                      undefined -> StartOptions0;
@@ -243,7 +247,7 @@ walk_clauses(Clauses, State) ->
              EvalTags =
                  {map, Line,
                   [
-                   ?MAP_FIELD(Line, process, make_call_remote(Line, erlang, self, [])) |
+                   ?MAP_FIELD(Line, 'location.pid', make_call_remote(Line, erlang, self, [])) |
                    [begin
                         ?MAP_FIELD(Line, Key, parse_expr_string(Line, ValueExprStr, State))
                     end || {Key, ValueExprStr} <- maps:to_list(State#state.eval_tags)]

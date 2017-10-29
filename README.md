@@ -78,7 +78,11 @@ foo(Bin) ->
   try
     passage_pd:start_span(
       'example:foo/1',
-      [{tags, #{application => example, module => example, lien => 7, foo => bar}}]),
+      [{tags, #{'location.pid' => self(),
+                'location.application' => example,
+                'location.module' => example,
+                'location.line' => 7,
+                foo => bar}}]),
     passage_pd:set_tags(#{process => self(), size => byte_size(Bin)}),
     <<"foo", Bin/binary>>
   after
