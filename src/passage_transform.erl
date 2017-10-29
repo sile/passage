@@ -115,7 +115,7 @@
 
 -type expr() :: expr_call_remote()
               | expr_var()
-              | erl_parse:abstract_expr().
+              | erl_parse:abstract_expr() | term().
 
 -type expr_call_remote() :: {call, line(), {remote, line(), expr(), expr()}, [expr()]}.
 -type expr_var() :: {var, line(), atom()}.
@@ -326,7 +326,7 @@ make_tags(Line, State) ->
        end || {Key, ValueExprStr} <- maps:to_list(State#state.tags)]
      ]}.
 
--spec make_error_log(line(), expr()) -> expr().
+-spec make_error_log(line(), [expr()]) -> expr().
 make_error_log(Line, Fields) ->
     make_call_remote(
       Line, passage_pd, log,
