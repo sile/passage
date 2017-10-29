@@ -225,18 +225,22 @@ set_operation_name(Span, Name)   -> passage_span:set_operation_name(Span, Name).
 %% @doc Sets the tags of `Span' to `Tags'.
 %%
 %% Note that the existing tags which have different keys with `Tags' are preserved.
--spec set_tags(maybe_span(), tags()) -> maybe_span().
-set_tags(undefined, _) -> undefined;
-set_tags(Span, Tags)   -> passage_span:set_tags(Span, Tags).
+-spec set_tags(maybe_span(), Tags) -> maybe_span() when
+      Tags :: tags() | fun (() -> tags()).
+set_tags(undefined, _)     -> undefined;
+set_tags(Span, Tags = #{}) -> passage_span:set_tags(Span, Tags);
+set_tags(Span, Fun)        -> set_tags(Span, Fun()).
 
 %% @doc Sets the baggage items of `Span' to `Items'.
 %%
 %% Note that the existing items which have different keys with `Items' are preserved.
 %%
 %% See also: <a href="https://github.com/opentracing/specification/blob/1.1/specification.md#set-a-baggage-item">Set a baggage item (The OpenTracing Semantic Specification)</a>
--spec set_baggage_items(maybe_span(), baggage_items()) -> maybe_span().
-set_baggage_items(undefined, _) -> undefined;
-set_baggage_items(Span, Items)  -> passage_span:set_baggage_items(Span, Items).
+-spec set_baggage_items(maybe_span(), Items) -> maybe_span() when
+      Items :: baggage_items() | fun (() -> baggage_items()).
+set_baggage_items(undefined, _)      -> undefined;
+set_baggage_items(Span, Items = #{}) -> passage_span:set_baggage_items(Span, Items);
+set_baggage_items(Span, Fun)         -> set_baggage_items(Span, Fun()).
 
 %% @doc Returns the baggage items carried by `Span'.
 -spec get_baggage_items(Span :: maybe_span()) -> baggage_items().
@@ -244,14 +248,17 @@ get_baggage_items(undefined) -> #{};
 get_baggage_items(Span)      -> passage_span:get_baggage_items(Span).
 
 %% @equiv log(Span, Fields, [])
--spec log(maybe_span(), log_fields()) -> maybe_span().
+-spec log(maybe_span(), Fields) -> maybe_span() when
+      Fields :: log_fields() | fun (() -> log_fields()).
 log(Span, Fields) ->
     log(Span, Fields, []).
 
 %% @doc Logs the `Fields' to `Span'.
--spec log(maybe_span(), log_fields(), log_options()) -> maybe_span().
-log(undefined, _, _)         -> undefined;
-log(Span0, Fields0, Options) ->
+-spec log(maybe_span(), Fields, log_options()) -> maybe_span() when
+      Fields :: log_fields() | fun (() -> log_fields()).
+log(undefined, _, _)                          -> undefined;
+log(Span, Fun, Options) when is_function(Fun) -> log(Span, Fun(), Options);
+log(Span0, Fields0, Options)                  ->
     case proplists:get_value(error, Options, false) of
         false -> passage_span:log(Span0, Fields0, Options);
         true  ->

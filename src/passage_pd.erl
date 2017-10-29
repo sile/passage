@@ -176,7 +176,8 @@ set_operation_name(OperationName) ->
 %% @doc Sets the tags of the current span to `Tags'.
 %%
 %% Note that the existing tags which have different keys with `Tags' are preserved.
--spec set_tags(passage:tags()) -> ok.
+-spec set_tags(Tags) -> ok when
+      Tags :: passage:tags() | fun (() -> passage:tags()).
 set_tags(Tags) ->
     update_current_span(fun (Span) -> passage_span:set_tags(Span, Tags) end).
 
@@ -185,7 +186,8 @@ set_tags(Tags) ->
 %% Note that the existing items which have different keys with `Items' are preserved.
 %%
 %% See also: <a href="https://github.com/opentracing/specification/blob/1.1/specification.md#set-a-baggage-item">Set a baggage item (The OpenTracing Semantic Specification)</a>
--spec set_baggage_items(passage:baggage_items()) -> ok.
+-spec set_baggage_items(Items) -> ok when
+      Items :: passage:baggage_items() | fun (() -> passage:baggage_items()).
 set_baggage_items(Items) ->
     update_current_span(fun (Span) -> passage_span:set_baggage_items(Span, Items) end).
 
@@ -196,12 +198,14 @@ get_baggage_items() ->
     passage:get_baggage_items(Span).
 
 %% @equiv log(Fields, [])
--spec log(passage:log_fields()) -> ok.
+-spec log(Fields) -> ok when
+      Fields :: passage:log_fields() | fun (() -> passage:log_fields()).
 log(Fields) ->
     log(Fields, []).
 
 %% @doc Logs the `Fields' to the current span.
--spec log(passage:log_fields(), passage:log_options()) -> ok.
+-spec log(Fields, passage:log_options()) -> ok when
+      Fields :: passage:log_fields() | fun (() -> passage:log_fields()).
 log(Fields, Options) ->
     update_current_span(fun (Span) -> passage:log(Span, Fields, Options) end).
 
