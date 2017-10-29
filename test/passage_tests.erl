@@ -66,6 +66,19 @@ passage_test_() ->
                ?assertEqual(#{foo => bar, baz => qux, 111 => 333},
                             passage_span:get_tags(FinishedSpan))
        end},
+      {"tag function",
+       fun () ->
+               ok = start_test_tracer(),
+               Span0 =
+                   passage:start_span(
+                     root, [{tracer, test_tracer}, {tags, #{foo => bar, 111 => 222}}]),
+               Span1 = passage:set_tags(Span0, fun () -> #{baz => qux, 111 => 333} end),
+
+               passage:finish_span(Span1),
+               [FinishedSpan] = finished_spans(),
+               ?assertEqual(#{foo => bar, baz => qux, 111 => 333},
+                            passage_span:get_tags(FinishedSpan))
+       end},
       {"baggage item",
        fun () ->
                ok = start_test_tracer(),
@@ -80,12 +93,42 @@ passage_test_() ->
                ?assertEqual(#{<<"foo">> => <<"bar">>, <<"baz">> => <<"qux">>},
                             passage:get_baggage_items(ChildSpan1))
        end},
+      {"baggage item function",
+       fun () ->
+               ok = start_test_tracer(),
+               RootSpan0 = passage:start_span(root, [{tracer, test_tracer}]),
+               RootSpan1 = passage:set_baggage_items(
+                             RootSpan0, fun () -> #{<<"foo">> => <<"bar">>} end),
+
+               ChildSpan0 = passage:start_span(child, [{child_of, RootSpan1}]),
+               ?assertEqual(#{<<"foo">> => <<"bar">>},
+                            passage:get_baggage_items(ChildSpan0)),
+
+               ChildSpan1 = passage:set_baggage_items(
+                              ChildSpan0, fun () -> #{<<"baz">> => <<"qux">>} end),
+               ?assertEqual(#{<<"foo">> => <<"bar">>, <<"baz">> => <<"qux">>},
+                            passage:get_baggage_items(ChildSpan1))
+       end},
       {"log",
        fun () ->
                ok = start_test_tracer(),
                Span0 = passage:start_span(root, [{tracer, test_tracer}]),
                Span1 = passage:log(Span0, #{hello => world}, [{time, {1, 2, 3}}]),
                Span2 = passage:log(Span1, #{foo => bar}),
+
+               passage:finish_span(Span2),
+               [FinishedSpan] = finished_spans(),
+               ?assertMatch([{#{foo := bar}, {_, _, _}},
+                             {#{hello := world}, {1, 2, 3}}],
+                            passage_span:get_logs(FinishedSpan))
+       end},
+      {"log function",
+       fun () ->
+               ok = start_test_tracer(),
+               Span0 = passage:start_span(root, [{tracer, test_tracer}]),
+               Span1 = passage:log(Span0, fun () -> #{hello => world} end,
+                                   [{time, {1, 2, 3}}]),
+               Span2 = passage:log(Span1, fun () -> #{foo => bar} end),
 
                passage:finish_span(Span2),
                [FinishedSpan] = finished_spans(),

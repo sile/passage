@@ -179,7 +179,7 @@ set_operation_name(OperationName) ->
 -spec set_tags(Tags) -> ok when
       Tags :: passage:tags() | fun (() -> passage:tags()).
 set_tags(Tags) ->
-    update_current_span(fun (Span) -> passage_span:set_tags(Span, Tags) end).
+    update_current_span(fun (Span) -> passage:set_tags(Span, Tags) end).
 
 %% @doc Sets the baggage items of the current span to `Items'.
 %%
@@ -189,7 +189,7 @@ set_tags(Tags) ->
 -spec set_baggage_items(Items) -> ok when
       Items :: passage:baggage_items() | fun (() -> passage:baggage_items()).
 set_baggage_items(Items) ->
-    update_current_span(fun (Span) -> passage_span:set_baggage_items(Span, Items) end).
+    update_current_span(fun (Span) -> passage:set_baggage_items(Span, Items) end).
 
 %% @doc Returns the baggage items carried by the current span.
 -spec get_baggage_items() -> passage:baggage_items().
