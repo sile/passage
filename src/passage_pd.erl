@@ -59,10 +59,10 @@
 -type with_span_options() :: [with_span_option()].
 %% Options for {@link with_span/3}
 
--type with_span_option() :: error_if_exception | {error_if_exception, boolean()}
+-type with_span_option() :: {error_if_exception, boolean()}
                           | passage:start_span_option().
 %% <ul>
-%%  <li>`error_if_exception': If this flag presents, the exception which raised while executing the function will be logged and the span will be tagged as error.</li>
+%%  <li>`error_if_exception': If `true', the exception which raised while executing the function will be logged and the span will be tagged as error. The default value is `true'.</li>
 %% </ul>
 
 %%------------------------------------------------------------------------------
@@ -117,7 +117,7 @@ with_span(OperationName, Fun) ->
       Fun :: fun (() -> Result),
       Result :: term().
 with_span(OperationName, Options, Fun) ->
-    ErrorIfException = proplists:get_value(error_if_exception, Options, false),
+    ErrorIfException = proplists:get_value(error_if_exception, Options, true),
     case ErrorIfException of
         false ->
             try
