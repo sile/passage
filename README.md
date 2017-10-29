@@ -66,7 +66,7 @@ receive {span, FinishedRootSpan} -> ok end.
 
 -compile({parse_transform, passage_transform}). % Enables `passage_transform'
 
--passage_trace([{tags, #{foo => bar}}, {eval_tags, #{size => "byte_size(Bin)"}}]).
+-passage_trace([{tags, #{foo => "bar", size => "byte_size(Bin)"}}]).
 -spec foo(binary()) -> binary().
 foo(Bin) ->
   <<"foo", Bin/binary>>.
@@ -76,14 +76,18 @@ The above `foo` function will be transformed as follows:
 ```erlang
 foo(Bin) ->
   try
-    passage_pd:start_span(
-      'example:foo/1',
-      [{tags, #{'location.pid' => self(),
+    passage_pd:start_span('example:foo/1', []),
+    passage_pd:set_tags(
+        fun () ->
+            #{
+                'location.pid' => self(),
                 'location.application' => example,
                 'location.module' => example,
-                'location.line' => 7,
-                foo => bar}}]),
-    passage_pd:set_tags(#{process => self(), size => byte_size(Bin)}),
+                'location.line' => 7
+                foo => bar,
+                size => byte_size(Bin)
+             }
+        end),
     <<"foo", Bin/binary>>
   after
     passage_pd:finish_span()

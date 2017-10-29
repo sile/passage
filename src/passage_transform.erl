@@ -13,7 +13,7 @@
 %%
 %% -compile({parse_transform, passage_transform}). % Enables `passage_transform'
 %%
-%% -passage_trace([{tags, #{foo => bar}}, {eval_tags, #{size => "byte_size(Bin)"}}]).
+%% -passage_trace([{tags, #{foo => "bar", size => "byte_size(Bin)"}}]).
 %% -spec foo(binary()) -> binary().
 %% foo(Bin) ->
 %%   <<"foo", Bin/binary>>.
@@ -24,14 +24,18 @@
 %% ```
 %% foo(Bin) ->
 %%   try
-%%     passage_pd:start_span(
-%%       'example:foo/1',
-%%       [{tags, #{'location.pid' => self(),
+%%     passage_pd:start_span('example:foo/1', []),
+%%     passage_pd:set_tags(
+%%         fun () ->
+%%             #{
+%%                 'location.pid' => self(),
 %%                 'location.application' => example,
 %%                 'location.module' => example,
-%%                 'location.line' => 7,
-%%                 foo => bar}}]),
-%%     passage_pd:set_tags(#{process => self(), size => byte_size(Bin)}),
+%%                 'location.line' => 7
+%%                 foo => bar,
+%%                 size => byte_size(Bin)
+%%              }
+%%         end),
 %%     <<"foo", Bin/binary>>
 %%   after
 %%     passage_pd:finish_span()
@@ -59,16 +63,14 @@
 %% Exported Types
 %%------------------------------------------------------------------------------
 -type passage_trace_option() :: {tracer, passage:tracer_id()} |
-                                {tags, passage:tags()} |
-                                {eval_tags, #{passage:tag_name() => expr_string()}} |
+                                {tags, #{passage:tag_name() => expr_string()}} |
                                 {child_of, expr_string()} |
                                 {follows_from, expr_string()} |
                                 {error_if, expr_string()} |
                                 error_if_exception.
 %% <ul>
 %% <li><b>tracer</b>: See {@link passage:start_span/2}</li>
-%% <li><b>tags</b>: See {@link passage:start_span/2}</li>
-%% <li><b>eval_tags</b>: This is the same as `tags' except the values are dynamically evaluated in the transforming phase.</li>
+%% <li><b>tags</b>: This is the same as {@type passage:tags()} except the values are dynamically evaluated in the transforming phase.</li>
 %% <li><b>child_of</b>: See {@link passage:start_span/2}</li>
 %% <li><b>follows_from</b>: See {@link passage:start_span/2}</li>
 %% <li><b>error_if</b>
@@ -144,8 +146,7 @@
           tracer = error  :: {ok, passage:tracer_id()} | error,
           child_of        :: expr_string() | undefined,
           follows_from    :: expr_string() | undefined,
-          tags      = #{} :: passage:tags(),
-          eval_tags = #{} :: #{passage:tag_name() => expr_string()},
+          tags = #{}      :: #{passage:tag_name() => expr_string()},
           error_if        :: expr_string() | undefined,
           error_if_exception = false :: boolean()
         }).
@@ -171,13 +172,6 @@ walk_forms(Forms, State) ->
     {_, ResultFroms} =
         lists:foldl(
           fun ({attribute, _, passage_trace, Options}, {State0, Acc}) ->
-                  Tags =
-                      maps:merge(
-                        proplists:get_value(tags, Options, #{}),
-                        #{
-                           'location.application' => State0#state.application,
-                           'location.module' => State0#state.module
-                         }),
                   Tracer =
                       case lists:keyfind(tracer, 1, Options) of
                           false   -> error;
@@ -186,18 +180,16 @@ walk_forms(Forms, State) ->
                   State1 =
                       State0#state{
                         trace = true,
-
                         tracer = Tracer,
                         child_of = proplists:get_value(child_of, Options),
                         follows_from = proplists:get_value(follows_from, Options),
-                        tags = Tags,
-                        eval_tags = proplists:get_value(eval_tags, Options, #{}),
+                        tags = proplists:get_value(tags, Options, #{}),
                         error_if = proplists:get_value(error_if, Options),
                         error_if_exception =
                             proplists:is_defined(error_if_exception, Options)
                        },
                   {State1, Acc};
-              ({function, _, Name, _, Clauses} = Form, {State0 = #state{trace = true}, Acc}) ->
+              ({function, _, Name, _,Clauses} = Form, {State0 = #state{trace = true}, Acc}) ->
                   State1 = State0#state{function = Name},
                   NewForm = setelement(5, Form, walk_clauses(Clauses, State1)),
                   {State1#state{trace = false}, [NewForm | Acc]};
@@ -216,13 +208,10 @@ walk_clauses(Clauses, State) ->
                                  [State#state.module, State#state.function, length(Args)]),
              OperationName = {atom, Line, binary_to_atom(list_to_binary(Mfa), utf8)},
              StartOptions0 =
-                 erl_parse:abstract(
-                   [{tags, maps:merge(State#state.tags, #{line => Line})} |
-                    case State#state.tracer of
-                        error        -> [];
-                        {ok, Tracer} -> [{tracer, Tracer}]
-                    end],
-                   [{'location.line', Line}]),
+                 case State#state.tracer of
+                     error        -> erl_parse:abstract([]);
+                     {ok, Tracer} -> erl_parse:abstract([{tracer, Tracer}])
+                 end,
              StartOptions1 =
                  case State#state.child_of of
                      undefined -> StartOptions0;
@@ -244,16 +233,21 @@ walk_clauses(Clauses, State) ->
                  make_call_remote(
                    Line, passage_pd, 'start_span', [OperationName, StartOptions2]),
 
-             EvalTags =
+             Tags =
                  {map, Line,
                   [
-                   ?MAP_FIELD(Line, 'location.pid', make_call_remote(Line, erlang, self, [])) |
+                   ?MAP_FIELD(Line, 'location.pid',
+                              make_call_remote(Line, erlang, self, [])),
+                   ?MAP_FIELD(Line, 'location.application',
+                              {atom, Line, State#state.application}),
+                   ?MAP_FIELD(Line, 'location.module', {atom, Line, State#state.module}),
+                   ?MAP_FIELD(Line, 'location.line', {integer, Line, Line}) |
                    [begin
                         ?MAP_FIELD(Line, Key, parse_expr_string(Line, ValueExprStr, State))
-                    end || {Key, ValueExprStr} <- maps:to_list(State#state.eval_tags)]
+                    end || {Key, ValueExprStr} <- maps:to_list(State#state.tags)]
                   ]},
              SetTags =
-                 make_call_remote(Line, passage_pd, 'set_tags', [EvalTags]),
+                 make_call_remote(Line, passage_pd, 'set_tags', [make_fun(Line, [Tags])]),
              Body1 =
                  case State#state.error_if of
                      undefined  -> Body0;
@@ -384,3 +378,8 @@ make_var(Line, Prefix) ->
     Name =
         list_to_atom(Prefix ++ "_" ++ integer_to_list(Line) ++ "_" ++ integer_to_list(Seq)),
     {var, Line, Name}.
+
+-spec make_fun(line(), [expr()]) -> expr().
+make_fun(Line, Body) ->
+    {'fun', Line,
+     {clauses, [{clause, Line, [], [], Body}]}}.

@@ -13,7 +13,7 @@
 %%------------------------------------------------------------------------------
 %% Exported Functions
 %%------------------------------------------------------------------------------
--passage_trace([{tags, #{kind => greeting}}, {eval_tags, #{name => "Name"}}]).
+-passage_trace([{tags, #{kind => "greeting", name => "Name"}}]).
 -spec hello(atom()) -> ok.
 hello(Name) ->
     io:format("Hello ~s\n", [Name]),
