@@ -66,6 +66,7 @@
 -export([make_extracted_span/2]).
 -export([start/2, start_root/3]).
 -export([finish/2]).
+-export([set_tracer/2]).
 -export([set_operation_name/2]).
 -export([set_tags/2]).
 -export([log/3]).
@@ -214,6 +215,11 @@ finish(Span0, Options) ->
         error          -> ok;
         {ok, Reporter} -> passage_reporter:report(Reporter, Span1)
     end.
+
+%% @private
+-spec set_tracer(span(), passage:tracer_id()) -> span().
+set_tracer(Span, Tracer) ->
+    Span#?SPAN{tracer = Tracer}.
 
 %% @private
 -spec set_operation_name(span(), passage:operation_name()) -> span().

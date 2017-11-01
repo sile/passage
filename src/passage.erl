@@ -37,6 +37,7 @@
 %%------------------------------------------------------------------------------
 -export([start_span/1, start_span/2]).
 -export([finish_span/1, finish_span/2]).
+-export([set_tracer/2]).
 -export([set_operation_name/2]).
 -export([set_tags/2]).
 -export([set_baggage_items/2]).
@@ -216,6 +217,15 @@ finish_span(Span, Options) ->
                   end),
             ok
     end.
+
+%% @doc Sets the tracer of `Span' to `Tracer'.
+%%
+%% At the finish of the span, the reporter of `Tracer' will be used to report it.
+%%
+%% This change affects all descendants of this span.
+-spec set_tracer(maybe_span(), tracer_id()) -> maybe_span().
+set_tracer(undefined, _) -> undefined;
+set_tracer(Span, Tracer) -> passage_span:set_tracer(Span, Tracer).
 
 %% @doc Sets the operation name of `Span' to `Name'.
 -spec set_operation_name(maybe_span(), operation_name()) -> maybe_span().

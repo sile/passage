@@ -40,6 +40,7 @@
 -export([with_span/2, with_span/3]).
 -export([with_parent_span/2]).
 -export([current_span/0]).
+-export([set_tracer/1]).
 -export([set_operation_name/1]).
 -export([set_tags/1]).
 -export([set_baggage_items/1]).
@@ -176,6 +177,16 @@ current_span() ->
         [{_, Span} | _] -> Span;
         _               -> undefined
     end.
+
+%% @doc Sets the tracer of the current span to `Tracer'.
+%%
+%% At the finish of the span, the reporter of `Tracer' will be used to report it.
+%%
+%% This change affects all descendants of the span.
+-spec set_tracer(passage:tracer_id()) -> ok.
+set_tracer(Tracer) ->
+    update_current_span(
+      fun (Span) -> passage_span:set_tracer(Span, Tracer) end).
 
 %% @doc Sets the operation name of the current span to `OperationName'.
 -spec set_operation_name(passage:operation_name()) -> ok.
