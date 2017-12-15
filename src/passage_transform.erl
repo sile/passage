@@ -23,7 +23,7 @@
 %%
 %% ```
 %% foo(Bin) ->
-%    passage_pd:start_span('example:foo/1', []),
+%%   passage_pd:start_span('example:foo/1', []),
 %%   try
 %%     passage_pd:set_tags(
 %%         fun () ->
@@ -62,7 +62,7 @@
 %%------------------------------------------------------------------------------
 %% Exported Types
 %%------------------------------------------------------------------------------
--type passage_trace_option() :: {tracer, passage:tracer_id()} |
+-type passage_trace_option() :: {tracer, expr_string()} |
                                 {tags, #{passage:tag_name() => expr_string()}} |
                                 {child_of, expr_string()} |
                                 {follows_from, expr_string()} |
@@ -130,7 +130,7 @@
 
           trace   = false :: boolean(), % if `true' the next function will be traced
 
-          tracer = error  :: {ok, passage:tracer_id()} | error,
+          tracer = error  :: {ok, expr_string()} | error,
           child_of        :: expr_string() | undefined,
           follows_from    :: expr_string() | undefined,
           tags = #{}      :: #{passage:tag_name() => expr_string()},
@@ -293,7 +293,8 @@ make_start_span_options(Line, State) ->
     Options0 =
         case State#state.tracer of
             error        -> erl_parse:abstract([], [{line, Line}]);
-            {ok, Tracer} -> erl_parse:abstract([{tracer, Tracer}], [{line, Line}])
+            {ok, Tracer} ->
+                {cons, Line, ?PAIR(Line, tracer, parse_expr_string(Line, Tracer, State)), {nil, Line}}
         end,
     Options1 =
         case State#state.child_of of
