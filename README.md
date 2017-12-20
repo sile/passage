@@ -6,7 +6,7 @@ passage
 [![Code Coverage](https://codecov.io/gh/sile/passage/branch/master/graph/badge.svg)](https://codecov.io/gh/sile/passage/branch/master)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-[OpenTraceing](http://opentracing.io/) API for Erlang
+[OpenTracing](http://opentracing.io/) API for Erlang
 
 [Documentation](https://hexdocs.pm/passage/)
 
