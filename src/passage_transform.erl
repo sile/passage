@@ -194,12 +194,11 @@ walk_clauses(Clauses, State) ->
 -spec walk_clause(clause(), #state{}) -> clause().
 walk_clause({clause, Line, Args, Guards, Body0}, State) ->
     OperationName = make_operation_name(Line, length(Args), State),
-    StartSpanOptions = make_start_span_options(Line, State),
+    Tags = make_tags(Line, State),
+    StartSpanOptions = make_start_span_options(Line, Tags, State),
     StartSpan =
         make_call_remote(Line, passage_pd, 'start_span', [OperationName, StartSpanOptions]),
 
-    Tags = make_tags(Line, State),
-    SetTags = make_call_remote(Line, passage_pd, 'set_tags', [make_fun(Line, [Tags])]),
     Body1 = make_body(Line, Body0, State),
     FinishSpan = make_call_remote(Line, passage_pd, 'finish_span', []),
 
@@ -207,7 +206,7 @@ walk_clause({clause, Line, Args, Guards, Body0}, State) ->
     {clause, Line, Args, Guards,
      [
       StartSpan,
-      {'try', Line, [SetTags | Body1], [], CatchClauses, [FinishSpan]}
+      {'try', Line, Body1, [], CatchClauses, [FinishSpan]}
      ]};
 walk_clause(Clause, _State) ->
     Clause.
@@ -277,24 +276,21 @@ make_var(Line, Prefix) ->
         list_to_atom(Prefix ++ "_" ++ integer_to_list(Line) ++ "_" ++ integer_to_list(Seq)),
     {var, Line, Name}.
 
--spec make_fun(line(), [expr()]) -> expr().
-make_fun(Line, Body) ->
-    {'fun', Line,
-     {clauses, [{clause, Line, [], [], Body}]}}.
-
 -spec make_operation_name(line(), non_neg_integer(), #state{}) -> expr().
 make_operation_name(Line, Arity, State) ->
     Mfa = io_lib:format("~s:~s/~p", [State#state.module, State#state.function, Arity]),
     {atom, Line, binary_to_atom(list_to_binary(Mfa), utf8)}.
 
 
--spec make_start_span_options(line(), #state{}) -> expr().
-make_start_span_options(Line, State) ->
+-spec make_start_span_options(line(), expr(), #state{}) -> expr().
+make_start_span_options(Line, Tags, State) ->
     Options0 =
         case State#state.tracer of
-            error        -> erl_parse:abstract([], [{line, Line}]);
+            error ->
+                {cons, Line, ?PAIR(Line, tags, Tags), {nil, Line}};
             {ok, Tracer} ->
-                {cons, Line, ?PAIR(Line, tracer, parse_expr_string(Line, Tracer, State)), {nil, Line}}
+                {cons, Line, ?PAIR(Line, tags, Tags),
+                 {cons, Line, ?PAIR(Line, tracer, parse_expr_string(Line, Tracer, State)), {nil, Line}}}
         end,
     Options1 =
         case State#state.child_of of
