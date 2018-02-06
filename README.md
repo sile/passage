@@ -65,6 +65,7 @@ receive {span, FinishedRootSpan} -> ok end.
 -module(example).
 
 -compile({parse_transform, passage_transform}). % Enables `passage_transform'
+-compile({passage_default_tracer, "foo_tracer"}). % Specifies the default tracer (optional)
 
 -passage_trace([{tags, #{foo => "bar", size => "byte_size(Bin)"}}]).
 -spec foo(binary()) -> binary().

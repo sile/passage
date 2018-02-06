@@ -12,6 +12,7 @@
 %% -module(example).
 %%
 %% -compile({parse_transform, passage_transform}). % Enables `passage_transform'
+%% -compile({passage_default_tracer, "foo_tracer"}). % Specifies the default tracer (optional)
 %%
 %% -passage_trace([{tags, #{foo => "bar", size => "byte_size(Bin)"}}]).
 %% -spec foo(binary()) -> binary().
@@ -127,6 +128,7 @@
           application :: atom(),
           module      :: module(),
           function    :: atom(),
+          default_tracer :: expr_string() | undefined,
 
           trace   = false :: boolean(), % if `true' the next function will be traced
 
@@ -145,10 +147,13 @@
 -spec parse_transform(AbstractForms, list()) -> AbstractForms when
       AbstractForms :: [term()].
 parse_transform(AbstractForms, CompileOptions) ->
-    State = #state{
-             application = guess_application(AbstractForms, CompileOptions),
-             module      = get_module(AbstractForms)
-            },
+    DefaultTracer = proplists:get_value(passage_default_tracer, CompileOptions),
+    State =
+        #state{
+           application    = guess_application(AbstractForms, CompileOptions),
+           module         = get_module(AbstractForms),
+           default_tracer = DefaultTracer
+          },
     walk_forms(AbstractForms, State).
 
 %%------------------------------------------------------------------------------
@@ -160,9 +165,10 @@ walk_forms(Forms, State) ->
         lists:foldl(
           fun ({attribute, _, passage_trace, Options}, {State0, Acc}) ->
                   Tracer =
-                      case lists:keyfind(tracer, 1, Options) of
-                          false   -> error;
-                          {_, Id} -> {ok, Id}
+                      case {lists:keyfind(tracer, 1, Options), State#state.default_tracer} of
+                          {false, undefined}     -> error;
+                          {false, DefaultTracer} -> {ok, DefaultTracer};
+                          {{_, Tracer0}, _}      -> {ok, Tracer0}
                       end,
                   State1 =
                       State0#state{
