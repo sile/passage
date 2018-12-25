@@ -54,6 +54,16 @@
 %%------------------------------------------------------------------------------
 -define(ANCESTORS_KEY, passage_span_ancestors).
 
+-ifdef('OTP_RELEASE').
+%% The 'OTP_RELEASE' macro introduced at OTP-21,
+%% so we can use it for detecting whether the Erlang compiler supports new try/catch syntax or not.
+-define(CAPTURE_STACKTRACE, :__StackTrace).
+-define(GET_STACKTRACE, __StackTrace).
+-else.
+-define(CAPTURE_STACKTRACE, ).
+-define(GET_STACKTRACE, erlang:get_stacktrace()).
+-endif.
+
 %%------------------------------------------------------------------------------
 %% Exported Types
 %%------------------------------------------------------------------------------
@@ -135,8 +145,8 @@ with_span(OperationName, Options, Fun) ->
                 start_span(OperationName, Options),
                 Fun()
             catch
-                Class:Error ->
-                    Stack = erlang:get_stacktrace(),
+                Class:Error ?CAPTURE_STACKTRACE ->
+                    Stack = ?GET_STACKTRACE,
                     log(#{?LOG_FIELD_ERROR_KIND => Class,
                           ?LOG_FIELD_MESSAGE => Error,
                           ?LOG_FIELD_STACK => Stack},
