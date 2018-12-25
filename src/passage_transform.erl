@@ -361,10 +361,10 @@ make_catch_clauses(_, #state{error_if_exception = false}) ->
 make_catch_clauses(Line, _) ->
     ClassVar = make_var(Line, "__Class"),
     ErrorVar = make_var(Line, "__Error"),
-    GetStrackTrace = make_call_remote(Line, erlang, get_stacktrace, []),
+    {StackTraceVar, GetStrackTrace} = make_stacktrace(Line),
     [
      {clause, Line,
-      [{tuple, Line, [ClassVar, ErrorVar, {var, Line, '_'}]}],
+      [{tuple, Line, [ClassVar, ErrorVar, StackTraceVar]}],
       [],
       [
        make_error_log(
@@ -378,3 +378,21 @@ make_catch_clauses(Line, _) ->
       ]
      }
     ].
+
+-ifdef('OTP_RELEASE').
+
+-spec make_stacktrace(line()) -> {expr_var(), expr_var()}.
+make_stacktrace(Line) ->
+    StackTraceVar = make_var(Line, "__StackTrace"),
+    GetStrackTrace = StackTraceVar,
+    {StackTraceVar, GetStrackTrace}.
+
+-else.
+
+-spec make_stacktrace(line()) -> {expr_var(), expr_call_remote()}.
+make_stacktrace(Line) ->
+    StackTraceVar = {var, Line, '_'},
+    GetStrackTrace = make_call_remote(Line, erlang, get_stacktrace, []),
+    {StackTraceVar, GetStrackTrace}.
+
+-endif.
